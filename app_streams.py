@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import os
 import json 
 import tempfile 
-from PIL import Image
+
 
 st.set_page_config(page_title='Vybbe Streams', layout="wide")
 
@@ -199,8 +199,7 @@ def display_daily_chart(sheet_index, section_title, item_type, key_suffix, chart
     
 # --- aplicativo Streamlit ---
 
-imagem = Image.open("logo_habbla_cor_positivo.png")
-st.image(imagem,width=100)
+
 st.title('🎶 Vybbe Dashboard Streams')
 
 menu_principal = ["Daily Top Songs", "Daily Top Artists", "Daily Viral Songs"]
