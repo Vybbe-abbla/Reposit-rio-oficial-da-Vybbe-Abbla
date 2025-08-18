@@ -97,7 +97,7 @@ def get_album_image(album_name):
         st.error(f"Erro ao buscar imagem do álbum {album_name}: {e}")
     return None
 
-def display_chart(sheet_index, section_title, item_type, key_suffix, chart_filter_options, chart_type):
+def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type):
     st.subheader(section_title)
     df = load_data(sheet_index)
 
@@ -106,27 +106,17 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_filte
         date_col_name = 'DATA' if 'DATA' in df.columns else 'Data'
         df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y")
         
-        df_display = pd.DataFrame()
-        
-        if chart_type == 'daily':
-            yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
-            df_display = df[df[date_col_name] == pd.to_datetime(yesterday_date, format="%d/%m/%Y")].copy()
-            if df_display.empty:
-                st.info(f"A lista não contem artistas Vybbe na data {yesterday_date}.")
-            else:
-                st.markdown(f"**Dados do dia: {yesterday_date}**")
-        
-        elif chart_type == 'weekly':
-            latest_date = df[date_col_name].max()
-            df_display = df[df[date_col_name] == latest_date].copy()
-            if df_display.empty:
-                st.info("Nenhum dado encontrado para o gráfico semanal.")
-            else:
-                next_update = latest_date + timedelta(days=8)
-                st.markdown(f"**Última atualização:** {latest_date.strftime('%d/%m/%Y')}")
-                st.markdown(f"**Próxima atualização:** {next_update.strftime('%d/%m/%Y')}")
-                
+        # Filtro de data específica para imagens
+        latest_date = df[date_col_name].max()
+        if latest_date is not pd.NaT:
+            selected_date = st.date_input("Selecione a Data para Visualização", latest_date, key=f"date_input_{key_suffix}")
+            df_display = df[df[date_col_name] == pd.to_datetime(selected_date)].copy()
+        else:
+            df_display = pd.DataFrame()
+            st.info("Nenhum dado de data encontrado na planilha.")
+
         if not df_display.empty:
+            st.markdown(f"**Dados do dia/semana:** {selected_date.strftime('%d/%m/%Y')}")
             num_cols = min(len(df_display), 5)
             cols = st.columns(num_cols)
             for i, (index, row) in enumerate(df_display.iterrows()):
@@ -155,6 +145,8 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_filte
                         st.markdown(f"**Artista:** {row.get('Artista', 'N/A')}")
                     elif 'Álbum' in row:
                         st.markdown(f"**Álbum:** {row.get('Álbum', 'N/A')}")
+        else:
+            st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date.strftime('%d/%m/%Y')}.")
 
         st.write("---")
 
@@ -165,13 +157,14 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_filte
         df_filtered = df[df[item_col] == selected_item].copy()
         
         st.write("---")
-        filter_option = st.radio("Filtro do Gráfico:", chart_filter_options, key=f"chart_filter_{key_suffix}")
-        df_chart = df_filtered.copy()
+        # Remove a seleção de rádio e exibe apenas o filtro de período de datas
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Data de Início", df_filtered[date_col_name].min(), key=f"start_date_{key_suffix}")
+        with col2:
+            end_date = st.date_input("Data de Fim", df_filtered[date_col_name].max(), key=f"end_date_{key_suffix}")
+        df_chart = df_filtered[(df_filtered[date_col_name] >= pd.to_datetime(start_date)) & (df_filtered[date_col_name] <= pd.to_datetime(end_date))]
 
-        if filter_option == "Mês":
-            df_chart = df_filtered[df_filtered['Mês'] == st.selectbox("Selecione o Mês:", df_filtered['Mês'].unique(), key=f"filter_month_{key_suffix}")]
-        elif filter_option == "Ano":
-            df_chart = df_filtered[df_filtered['Ano'] == st.selectbox("Selecione o Ano:", df_filtered['Ano'].unique(), key=f"filter_year_{key_suffix}")]
 
         y_axis_col = "Rank"
         y_axis_title = "Posição no Ranking"
@@ -240,23 +233,23 @@ if chart_selection == "Daily Charts":
         st.header("Daily Top Songs")
         sub_opcao_songs = st.radio("Selecione uma região:", ("Global", "Brasil"), key="sub_menu_songs")
         if sub_opcao_songs == "Global":
-            display_chart(4, "Daily Top Songs Global", "a música", "songs_global", ["Geral", "Mês", "Ano"], 'daily')
+            display_chart(4, "Daily Top Songs Global", "a música", "songs_global", 'daily')
         elif sub_opcao_songs == "Brasil":
-            display_chart(5, "Daily Top Songs Brasil", "a música", "songs_brasil", ["Geral", "Mês", "Ano"], 'daily')
+            display_chart(5, "Daily Top Songs Brasil", "a música", "songs_brasil", 'daily')
     elif opcao_selecionada == "Daily Top Artists":
         st.header("Daily Top Artists")
         sub_opcao_artists = st.radio("Selecione uma região:", ("Global", "Brasil"), key="sub_menu_artists")
         if sub_opcao_artists == "Global":
-            display_chart(0, "Daily Top Artists Global", "o artista", "artists_global", ["Geral", "Mês", "Ano"], 'daily')
+            display_chart(0, "Daily Top Artists Global", "o artista", "artists_global", 'daily')
         elif sub_opcao_artists == "Brasil":
-            display_chart(1, "Daily Top Artists Brasil", "o artista", "artists_brasil", ["Mês", "Ano"], 'daily')
+            display_chart(1, "Daily Top Artists Brasil", "o artista", "artists_brasil", 'daily')
     elif opcao_selecionada == "Daily Viral Songs":
         st.header("Daily Viral Songs")
         sub_opcao_viral = st.radio("Selecione uma região:", ("Global", "Brasil"), key="sub_menu_viral")
         if sub_opcao_viral == "Global":
-            display_chart(8, "Daily Viral Songs Global", "a música", "viral_songs_global", ["Mês", "Ano"], 'daily')
+            display_chart(8, "Daily Viral Songs Global", "a música", "viral_songs_global", 'daily')
         elif sub_opcao_viral == "Brasil":
-            display_chart(9, "Daily Viral Songs Brasil", "a música", "viral_songs_brasil", ["Mês", "Ano"], 'daily')
+            display_chart(9, "Daily Viral Songs Brasil", "a música", "viral_songs_brasil", 'daily')
 
 elif chart_selection == "Weekly Charts":
     menu_weekly = ["Weekly Top Songs", "Weekly Top Artists", "Weekly Top Albums"]
@@ -267,20 +260,20 @@ elif chart_selection == "Weekly Charts":
         st.header("Weekly Top Songs")
         sub_opcao_songs_weekly = st.radio("Selecione uma região:", ("Global", "Brasil"), key="sub_menu_songs_weekly")
         if sub_opcao_songs_weekly == "Global":
-            display_chart(6, "Weekly Top Songs Global", "a música", "weekly_songs_global", ["Geral", "Mês", "Ano"], 'weekly')
+            display_chart(6, "Weekly Top Songs Global", "a música", "weekly_songs_global", 'weekly')
         elif sub_opcao_songs_weekly == "Brasil":
-            display_chart(7, "Weekly Top Songs Brasil", "a música", "weekly_songs_brasil", ["Geral", "Mês", "Ano"], 'weekly')
+            display_chart(7, "Weekly Top Songs Brasil", "a música", "weekly_songs_brasil", 'weekly')
     elif opcao_selecionada == "Weekly Top Artists":
         st.header("Weekly Top Artists")
         sub_opcao_artists_weekly = st.radio("Selecione uma região:", ("Global", "Brasil"), key="sub_menu_artists_weekly")
         if sub_opcao_artists_weekly == "Global":
-            display_chart(2, "Weekly Top Artists Global", "o artista", "weekly_artists_global", ["Geral", "Mês", "Ano"], 'weekly')
+            display_chart(2, "Weekly Top Artists Global", "o artista", "weekly_artists_global", 'weekly')
         elif sub_opcao_artists_weekly == "Brasil":
-            display_chart(3, "Weekly Top Artists Brasil", "o artista", "weekly_artists_brasil", ["Mês", "Ano"], 'weekly')
+            display_chart(3, "Weekly Top Artists Brasil", "o artista", "weekly_artists_brasil", 'weekly')
     elif opcao_selecionada == "Weekly Top Albums":
         st.header("Weekly Top Albums")
         sub_opcao_albums_weekly = st.radio("Selecione uma região:", ("Global", "Brasil"), key="sub_menu_albums_weekly")
         if sub_opcao_albums_weekly == "Global":
-            display_chart(10, "Weekly Top Albums Global", "o álbum", "weekly_albums_global", ["Geral", "Mês", "Ano"], 'weekly')
+            display_chart(10, "Weekly Top Albums Global", "o álbum", "weekly_albums_global", 'weekly')
         elif sub_opcao_albums_weekly == "Brasil":
-            display_chart(11, "Weekly Top Albums Brasil", "o álbum", "weekly_albums_brasil", ["Geral", "Mês", "Ano"], 'weekly')
+            display_chart(11, "Weekly Top Albums Brasil", "o álbum", "weekly_albums_brasil", 'weekly')
