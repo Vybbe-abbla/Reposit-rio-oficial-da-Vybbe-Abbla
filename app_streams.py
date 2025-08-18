@@ -165,10 +165,11 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type)
             end_date = st.date_input("Data de Fim", df_filtered[date_col_name].max(), key=f"end_date_{key_suffix}")
         df_chart = df_filtered[(df_filtered[date_col_name] >= pd.to_datetime(start_date)) & (df_filtered[date_col_name] <= pd.to_datetime(end_date))]
 
-
         y_axis_col = "Rank"
         y_axis_title = "Posição no Ranking"
-        if "Songs" in section_title:
+
+        # Lógica para habilitar a opção de streams apenas para Daily Top Songs e Weekly Top Songs
+        if "Top Songs" in section_title:
             chart_type_radio = st.radio(
                 "Tipo de visualização:", ("Ranking", "Streams"),
                 key=f"radio_chart_type_{key_suffix}"
