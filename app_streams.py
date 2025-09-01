@@ -10,10 +10,6 @@ from dotenv import load_dotenv
 import os
 import json
 import tempfile
-import locale
-
-# Configura o locale para formatar números no padrão brasileiro
-locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
 
 st.set_page_config(page_title='Vybbe Charts', layout="wide", initial_sidebar_state="expanded")
 
@@ -106,6 +102,15 @@ def get_track_album_image(track_name, artist_name):
     except Exception as e:
         st.error(f"Erro ao buscar imagem do álbum para a música {track_name} de {artist_name}: {e}")
     return None
+
+def format_br_number(number):
+    try:
+        # Converte para string e remove o decimal
+        s = f"{int(number):,}"
+        # Troca a vírgula por ponto para o padrão brasileiro
+        return s.replace(",", ".")
+    except (ValueError, TypeError):
+        return str(number)
 
 def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type, platform):
     st.subheader(section_title)
@@ -219,21 +224,21 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
                 if platform == 'Youtube':
                     if 'Videos' in section_title:
                         visualizacoes = row.get('Visualizações Diárias')
-                        if visualizacoes:
+                        if visualizacoes and str(visualizacoes).replace('.', '').replace(',', '').isdigit():
                             try:
                                 visualizacoes = int(str(visualizacoes).replace('.', '').replace(',', ''))
-                                st.markdown(f"**Visualizações:** {locale.format_string('%d', visualizacoes, grouping=True)}")
+                                st.markdown(f"**Visualizações:** {format_br_number(visualizacoes)}")
                             except (ValueError, TypeError):
-                                st.markdown(f"**Visualizações:** {visualizacoes}")
+                                pass
                         st.markdown(f"**Dias no ranking:** {row.get('days_on_chart', 'N/A')}")
                     if 'Semanal' in section_title:
                         st.markdown(f"**Weekly on chart:** {row.get('Weeks_on_chart', 'N/A')}")
-                        if 'Visualizações Semanais' in row:
+                        if 'Visualizações Semanais' in row and str(row.get('Visualizações Semanais', '0')).replace('.', '').replace(',', '').isdigit():
                             try:
                                 visualizacoes = float(str(row.get('Visualizações Semanais', '0')).replace('.', '').replace(',', ''))
-                                st.markdown(f"**Visualizações:** {locale.format_string('%d', visualizacoes, grouping=True)}")
+                                st.markdown(f"**Visualizações:** {format_br_number(visualizacoes)}")
                             except (ValueError, TypeError):
-                                st.markdown(f"**Visualizações:** {row.get('Visualizações Semanais', 'N/A')}")
+                                pass
                 # Correção para o "Streams" do Weekly Top Songs Brasil
                 if platform == 'Spotify' and 'Weekly Top Songs Brasil' in section_title:
                     if 'Streams' in row and not pd.isna(row.get('Streams')):
@@ -289,7 +294,7 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
 
     if y_axis_col in ["Streams", "Visualizações Semanais"] and y_axis_col in df_chart.columns:
         df_chart[y_axis_col] = df_chart[y_axis_col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).astype(float)
-        df_chart['y_axis_formatted'] = df_chart[y_axis_col].apply(lambda x: locale.format_string('%d', x, grouping=True))
+        df_chart['y_axis_formatted'] = df_chart[y_axis_col].apply(lambda x: format_br_number(x))
         y_tickformat = None
     
     text_col = 'y_axis_formatted' if 'y_axis_formatted' in df_chart.columns else y_axis_col
@@ -354,6 +359,7 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
     df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y")
     
     latest_date_available = df[date_col_name].max().date()
+    yesterday = datetime.today().date() - timedelta(days=1)
     
     show_date_selector = st.checkbox("Pesquisar por datas anteriores?", key=f"checkbox_{global_key_suffix}")
     
@@ -365,13 +371,16 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
         df_display = df[df[date_col_name].dt.date == selected_date].copy()
         selected_date_display = selected_date
     else:
-        df_display = df[df[date_col_name].dt.date == latest_date_available].copy()
-        selected_date_display = latest_date_available
-        
+        df_display = df[df[date_col_name].dt.date == yesterday].copy()
+        selected_date_display = yesterday
+
     if not df_display.empty:
-        st.markdown(f"**Semana Última Atualização:** {selected_date_display.strftime('%d/%m/%Y')}")
+        st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}")
     else:
-        st.info(f"😪 Nenhum dado encontrado para os artistas Vybbe no chart de {selected_date_display.strftime('%d/%m/%Y')}.")
+        if not show_date_selector:
+            st.info(f"😪 Nenhum dado encontrado para os artistas Vybbe no chart de {yesterday.strftime('%d/%m/%Y')}.")
+        elif selected_date_display:
+            st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
         st.write("---")
         return
 
@@ -463,6 +472,7 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
     
     st.plotly_chart(fig)
     st.write("---")
+
 
 # --- Estrutura principal do aplicativo ---
 st.title('🎶 Vybbe Dashboard Streams')
