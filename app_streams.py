@@ -543,11 +543,15 @@ if plataforma_selecionada == "Spotify":
 
 elif plataforma_selecionada == "Youtube":
     with st.sidebar.expander("YouTube Charts", expanded=True):
-        opcao_selecionada_youtube = st.radio("Selecione uma opção:", ["Top Videos Diários", "Top Clipes Semanal", "Top Faixas Semanal", "Top Artistas Semanal"], key="youtube_menu_radio")
+        opcao_selecionada_youtube = st.radio("Selecione uma opção:", ["Top Videos Diários", "Top Shorts Diários", "Top Clipes Semanal", "Top Faixas Semanal", "Top Artistas Semanal"], key="youtube_menu_radio")
     
     if opcao_selecionada_youtube == "Top Videos Diários":
         sheet_index = 18
         display_chart(sheet_index, "Top Videos Diários Brasil", "a música", "videos_diarios_br", 'daily', 'Youtube')
+
+    elif opcao_selecionada_youtube == "Top Shorts Diários":
+        sheet_index = 19
+        display_chart(sheet_index, "Top Shorts Diários Brasil", "a música", "shorts_diarios_br", 'daily', 'Youtube')
 
     elif opcao_selecionada_youtube == "Top Clipes Semanal":
         sheet_index = 17
