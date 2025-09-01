@@ -551,7 +551,7 @@ elif plataforma_selecionada == "Youtube":
 
     elif opcao_selecionada_youtube == "Top Shorts Diários":
         sheet_index = 19
-        display_chart(sheet_index, "Top Shorts Diários Brasil", "a música", "shorts_diarios_br", 'daily', 'Youtube')
+        display_chart(sheet_index, "Músicas mais tocadas nos Shorts neste dia", "a música", "shorts_diarios_br", 'daily', 'Youtube')
 
     elif opcao_selecionada_youtube == "Top Clipes Semanal":
         sheet_index = 17
@@ -564,7 +564,7 @@ elif plataforma_selecionada == "Youtube":
     elif opcao_selecionada_youtube == "Top Artistas Semanal":
         sheet_index = 15
         display_chart(sheet_index, "Top Artistas Semanal Brasil", "o artista", "artistas_semanal_br", 'weekly', 'Youtube')
-        
+
 elif plataforma_selecionada == "Deezer":
     st.header("Daily Top Songs Deezer")
     display_chart(sheet_index=12, section_title="Daily Top Songs Deezer", item_type="a música", key_suffix="songs_deezer", chart_type='daily', platform='Deezer')
