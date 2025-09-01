@@ -475,7 +475,7 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
 
 
 # --- Estrutura principal do aplicativo ---
-st.title('🎶 Vybbe Dashboard Streams')
+st.title('🎶 Vybbe Dashboard Streaming')
 st.markdown("Bem-vindo(a) ao seu portal de inteligência de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 st.write("---")
 
