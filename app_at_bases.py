@@ -4,6 +4,7 @@ import io
 import os
 import re
 from datetime import datetime, timedelta
+import xlsxwriter
 
 ARTISTS_FILE_PATH = "tabela_artistas.xlsx"
 MUSIC_PLATFORMS_FILE_PATH = "1.Streamings.xlsm"
