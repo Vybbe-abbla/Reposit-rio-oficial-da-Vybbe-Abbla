@@ -8,6 +8,9 @@ from datetime import datetime, timedelta
 # -----------------------------------------------------------------------------
 # Definição de Caminhos e Configurações
 # -----------------------------------------------------------------------------
+
+print("Arquivos vistos",os.listdir())
+
 ARTISTS_FILE_PATH = "Reposit-rio-oficial-da-Vybbe-Habbla\\1.app_atualização\\tabela_artistas.xlsx"
 MUSIC_PLATFORMS_FILE_PATH = "Reposit-rio-oficial-da-Vybbe-Habbla\\1.app_atualização\\1.Streamings.xlsm"
 
