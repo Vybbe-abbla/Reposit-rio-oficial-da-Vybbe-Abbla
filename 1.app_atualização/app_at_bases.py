@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 
 print("Arquivos vistos",os.listdir())
 
-ARTISTS_FILE_PATH = "Reposit-rio-oficial-da-Vybbe-Habbla\\1.app_atualização\\tabela_artistas.xlsx"
-MUSIC_PLATFORMS_FILE_PATH = "Reposit-rio-oficial-da-Vybbe-Habbla\\1.app_atualização\\1.Streamings.xlsm"
+ARTISTS_FILE_PATH = "tabela_artistas.xlsx"
+MUSIC_PLATFORMS_FILE_PATH = "1.Streamings.xlsm"
 
 # Dicionário de configuração para a geração dos arquivos de download
 DOWNLOAD_CONFIG = {
