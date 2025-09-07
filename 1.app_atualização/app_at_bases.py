@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 # -----------------------------------------------------------------------------
 # Definição de Caminhos e Configurações
 # -----------------------------------------------------------------------------
-ARTISTS_FILE_PATH = "H:\\Meu Drive\\GitHub\\Reposit-rio-oficial-da-Vybbe-Habbla\\1.app_atualização\\tabela_artistas.xlsx"
-MUSIC_PLATFORMS_FILE_PATH = "H:\\Meu Drive\\GitHub\\Reposit-rio-oficial-da-Vybbe-Habbla\\1.app_atualização\\1.Streamings.xlsx"
+ARTISTS_FILE_PATH = "tabela_artistas.xlsx"
+MUSIC_PLATFORMS_FILE_PATH = "1.Streamings.xlsx"
 
 # Dicionário de configuração para a geração dos arquivos de download
 DOWNLOAD_CONFIG = {
