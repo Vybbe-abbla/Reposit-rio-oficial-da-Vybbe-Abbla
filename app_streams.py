@@ -198,8 +198,10 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         
         st.write("---")
 
+        ontem = datetime.today().date() - timedelta(days=1)
+
         if 'Daily Top Songs' in section_title:
-            st.markdown(f"**Dados do dia:** 15/09/2025")
+            st.markdown(f"**Dados do dia:** {ontem.strftime('%d/%m/%Y')}")
             corte_charts_value = df_display['Corte charts'].iloc[0] if 'Corte charts' in df_display.columns and not df_display.empty else "N/A"
             if 'Daily Top Songs Brasil' in section_title and corte_charts_value != 'N/A':
                 st.markdown(f"**Corte do Chart:** {corte_charts_value}")
