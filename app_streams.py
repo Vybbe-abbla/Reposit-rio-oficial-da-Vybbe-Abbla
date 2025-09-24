@@ -22,6 +22,7 @@ planilha_completa = None
 if not google_sheets_creds_json:
     st.error("A variável de ambiente GOOGLE_SHEETS_CREDENTIALS não foi encontrada.")
 else:
+    temp_file_name = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_creds_file:
             temp_creds_file.write(google_sheets_creds_json)
@@ -35,11 +36,11 @@ else:
         client = gspread.authorize(creds)
         planilha_completa = client.open(title="2025_Charts")
         os.remove(temp_file_name)
-
+        temp_file_name = None # Limpa a referência após remoção
     except Exception as e:
         st.error(f"Erro ao autenticar com o Google Sheets: {e}")
-    
-    if 'temp_file_name' in locals() and os.path.exists(temp_file_name):
+    finally:
+        if temp_file_name and os.path.exists(temp_file_name):
             os.remove(temp_file_name)
 
 @st.cache_data
@@ -108,6 +109,8 @@ def get_track_album_image(track_name, artist_name):
 def format_br_number(number):
     try:
         if isinstance(number, (int, float)):
+            # Formata como inteiro, adiciona separador de milhares (virgula),
+            # e substitui para o padrão BR (ponto como milhar, vírgula como decimal)
             s = f"{int(number):,}"
             return s.replace(",", "X").replace(".", ",").replace("X", ".")
         else:
@@ -198,10 +201,9 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         
         st.write("---")
 
-        # --- CORREÇÃO APLICADA AQUI ---
+        # --- CORREÇÃO DE EXIBIÇÃO DE DATA (PARA ATENDER À SUA PRIMEIRA SOLICITAÇÃO) ---
         if 'Daily Top Songs' in section_title:
             if selected_date_display:
-                # Usando selected_date_display que armazena a data de ontem ou a selecionada
                 st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}") 
             corte_charts_value = df_display['Corte charts'].iloc[0] if 'Corte charts' in df_display.columns and not df_display.empty else "N/A"
             if 'Daily Top Songs Brasil' in section_title and corte_charts_value != 'N/A':
@@ -369,10 +371,22 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
     st.write("---")
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Data de Início", df_filtered[date_col_name].min(), key=f"start_date_{key_suffix}")
+        # Garante que st.date_input use um objeto datetime.date
+        min_date = df_filtered[date_col_name].min().date() if not df_filtered.empty else datetime.today().date()
+        start_date = st.date_input("Data de Início", min_date, key=f"start_date_{key_suffix}")
     with col2:
-        end_date = st.date_input("Data de Fim", df_filtered[date_col_name].max(), key=f"end_date_{key_suffix}")
-    df_chart = df_filtered[(df_filtered[date_col_name] >= pd.to_datetime(start_date)) & (df_filtered[date_col_name] <= pd.to_datetime(end_date))]
+        # Garante que st.date_input use um objeto datetime.date
+        max_date = df_filtered[date_col_name].max().date() if not df_filtered.empty else datetime.today().date()
+        end_date = st.date_input("Data de Fim", max_date, key=f"end_date_{key_suffix}")
+    
+    # --- CORREÇÃO DE FILTRAGEM DE DATA APLICADA AQUI ---
+    # Usa .dt.date na coluna do DataFrame para comparar objetos datetime.date (start_date/end_date)
+    # com a parte da data da coluna do DataFrame (evitando problemas de timestamp).
+    df_chart = df_filtered[
+        (df_filtered[date_col_name].dt.date >= start_date) & 
+        (df_filtered[date_col_name].dt.date <= end_date)
+    ].copy()
+    # FIM DA CORREÇÃO
 
     y_axis_col = "Rank"
     y_axis_title = "Posição no Ranking"
@@ -402,6 +416,7 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
                 y_axis_title = "Número de Visualizações"
 
     if y_axis_col in ["Streams", "Visualizações Semanais"] and y_axis_col in df_chart.columns:
+        # Conversão mais segura de streams/visualizações para float antes de formatar
         df_chart[y_axis_col] = df_chart[y_axis_col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).astype(float)
         df_chart['y_axis_formatted'] = df_chart[y_axis_col].apply(lambda x: format_br_number(x))
         y_tickformat = None
@@ -455,6 +470,259 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         yaxis_config['autorange'] = 'reversed'
     if y_tickformat:
         yaxis_config['tickformat'] = y_tickformat
+    
+    fig.update_layout(
+        xaxis_title="Dia",
+        yaxis=yaxis_config
+    )
+    
+    st.plotly_chart(fig)
+    st.write("---")
+
+def display_weekly_global_chart(global_sheet_index, global_section_title, global_item_type, global_key_suffix):
+    st.header(global_section_title)
+    df = load_data(global_sheet_index)
+
+    if df.empty:
+        st.info(f"😪 Nenhum dado disponível para o chart de {global_section_title}.")
+        st.write("---")
+        return
+    
+    item_col = 'Música' if 'Música' in df.columns else ('Álbum' if 'Álbum' in df.columns else ('Faixa' if 'Faixa' in df.columns else 'Artista'))
+
+    date_col_name = 'Data' if 'Data' in df.columns else 'DATA'
+    df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y")
+    
+    latest_date_available = df[date_col_name].max().date()
+    yesterday = datetime.today().date() - timedelta(days=1)
+    
+    show_date_selector = st.checkbox("Pesquisar por datas anteriores?", key=f"checkbox_{global_key_suffix}")
+    
+    df_display = pd.DataFrame()
+    selected_date_display = None
+    
+    if show_date_selector:
+        selected_date = st.date_input("Selecione a Data para Visualização", latest_date_available, key=f"date_input_{global_key_suffix}")
+        df_display = df[df[date_col_name].dt.date == selected_date].copy()
+        selected_date_display = selected_date
+    else:
+        df_display = df[df[date_col_name].dt.date == latest_date_available].copy()
+        selected_date_display = latest_date_available
+
+    if not df_display.empty:
+        st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}")
+    else:
+        if not show_date_selector:
+            st.info(f"😪 Nenhum dado encontrado para os artistas Vybbe no chart de {yesterday.strftime('%d/%m/%Y')}.")
+        elif selected_date_display:
+            st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
+        st.write("---")
+        return
+
+    total_artistas = df_display['Artista'].nunique()
+    if global_item_type == 'o artista':
+        col_artists = st.columns(1)
+        with col_artists[0]:
+            st.metric(label="Total de Artistas", value=total_artistas)
+    else:
+        total_items = df_display[item_col].nunique() if item_col in df_display.columns else 0
+        col_artists, col_tracks = st.columns(2)
+        with col_artists:
+            st.metric(label="Total de Artistas", value=total_artistas)
+        with col_tracks:
+            st.metric(label=f"Total de {item_col}s", value=total_items)
+            
+    st.write("---")
+    
+    # --- NOVO CÓDIGO DE VISUALIZAÇÃO (GLOBAL) ---
+    has_streams = 'Streams' in df_display.columns and not df_display['Streams'].isna().all() and "Artists" not in global_section_title and "Albums" not in global_section_title
+    
+    has_peak_date = 'Data de Pico' in df_display.columns or 'Data do Pico' in df_display.columns
+    
+    has_views_youtube = 'Visualizações Semanais' in df_display.columns and not df_display['Visualizações Semanais'].isna().all()
+    
+    column_ratios = [0.5, 3.5, 0.7, 0.7, 0.9]
+    if has_streams:
+        column_ratios.append(1.5)
+    if has_views_youtube:
+        column_ratios.append(1.5)
+    if has_peak_date:
+        column_ratios.append(1.2)
+    
+    header_cols = st.columns(column_ratios)
+
+    with header_cols[0]:
+        st.markdown("<b>#</b>", unsafe_allow_html=True)
+    with header_cols[1]:
+        header_text = "ARTIST" if "Top Artists" in global_section_title else ("ALBUM" if "Top Albums" in global_section_title else "TRACK")
+        st.markdown(f"<b>{header_text}</b>", unsafe_allow_html=True)
+    with header_cols[2]:
+        st.markdown("<b>Peak</b>", unsafe_allow_html=True)
+    with header_cols[3]:
+        st.markdown("<b>Prev</b>", unsafe_allow_html=True)
+    with header_cols[4]:
+        st.markdown("<b>Streak</b>", unsafe_allow_html=True)
+
+    col_index = 5
+    if has_streams:
+        with header_cols[col_index]:
+            st.markdown("<b>Streams</b>", unsafe_allow_html=True)
+        col_index += 1
+    
+    if has_views_youtube:
+        with header_cols[col_index]:
+            st.markdown("<b>Visualizações</b>", unsafe_allow_html=True)
+        col_index += 1
+    
+    if has_peak_date:
+        with header_cols[col_index]:
+            st.markdown("<b>Peak Date</b>", unsafe_allow_html=True)
+
+    st.markdown("---")
+    
+    for index, row in df_display.iterrows():
+        rank = row.get('Rank', 'N/A')
+        item_name = row.get(item_col, '').strip()
+        artist_name_col = 'Artista' if 'Artista' in df_display.columns else 'Criador'
+        artist_name = row.get(artist_name_col, 'N/A').strip()
+        peak_rank = row.get('peak_rank', 'N/A')
+        previous_rank = row.get('previous_rank', 'N/A')
+        
+        streak = "N/A"
+        if "Weekly Top Artists Global" in global_section_title or "Weekly Top Albums Global" in global_section_title or "Weekly Top Songs Global" in global_section_title:
+            streak = row.get('weeks_on_chart', 'N/A')
+        else:
+            streak = row.get('days_on_chart', 'N/A')
+
+        if "Top Artists" in global_section_title or "Top Albums" in global_section_title:
+            streams = "N/A"
+        else:
+            streams = row.get('Streams', 'N/A')
+        
+        peak_date = row.get('Data de Pico') or row.get('Data do Pico', 'N/A')
+        if peak_date != 'N/A':
+            peak_date = format_br_date(peak_date)
+        
+        image_url = None
+        
+        if global_item_type in ['a música', 'a faixa']:
+            image_url = get_track_album_image(item_name, artist_name)
+        elif global_item_type == 'o artista':
+            image_url = get_artist_image(artist_name.split(',')[0].strip())
+        elif global_item_type == 'o álbum':
+            image_url = get_album_image(item_name)
+
+        cols = st.columns(column_ratios)
+        with cols[0]:
+            st.markdown(f"<p style='font-size:20px; font-weight:bold;'>{rank}</p>", unsafe_allow_html=True)
+        with cols[1]:
+            track_cols = st.columns([0.7, 3])
+            with track_cols[0]:
+                if image_url:
+                    # 🎯 CORREÇÃO: Tamanho da imagem padronizado para 200
+                    st.image(image_url, width=200, caption="")
+                else:
+                    st.write("🖼️")
+            with track_cols[1]:
+                st.markdown(f"**{item_name}**")
+                if global_item_type != 'o artista':
+                    st.markdown(f"<span style='color: gray; font-size: 16px;'>{artist_name}</span>", unsafe_allow_html=True)
+        with cols[2]:
+            st.markdown(f"<span style='font-size: 16px;'>{peak_rank}</span>", unsafe_allow_html=True)
+        with cols[3]:
+            st.markdown(f"<span style='font-size: 16px;'>{previous_rank}</span>", unsafe_allow_html=True)
+        with cols[4]:
+            st.markdown(f"<span style='font-size: 16px;'>{streak}</span>", unsafe_allow_html=True)
+        
+        col_index = 5
+        if has_streams:
+            with cols[col_index]:
+                if streams != 'N/A' and str(streams).replace('.', '').replace(',', '').isdigit():
+                    st.markdown(f"<span style='font-size: 16px;'>{format_br_number(streams)}</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<span style='font-size: 16px;'>N/A</span>", unsafe_allow_html=True)
+            col_index += 1
+
+        if has_views_youtube:
+            with cols[col_index]:
+                views = row.get('Visualizações Semanais', 'N/A')
+                if views != 'N/A' and str(views).replace('.', '').replace(',', '').isdigit():
+                    st.markdown(f"<span style='font-size: 16px;'>{format_br_number(views)}</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<span style='font-size: 16px;'>{views}</span>", unsafe_allow_html=True)
+            col_index += 1
+        
+        if has_peak_date:
+            with cols[col_index]:
+                st.markdown(f"<span style='font-size: 16px;'>{peak_date}</span>", unsafe_allow_html=True)
+        
+        st.markdown("---")
+
+    df_unique_items = sorted(df[item_col].unique())
+    selected_item = st.selectbox(f"Selecione {global_item_type} para análise do ranking", df_unique_items, key=f"selectbox_{global_key_suffix}")
+    df_filtered = df[df[item_col] == selected_item].copy()
+    
+    st.write("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        min_date = df_filtered[date_col_name].min().date() if not df_filtered.empty else datetime.today().date()
+        start_date = st.date_input("Data de Início", min_date, key=f"start_date_{global_key_suffix}")
+    with col2:
+        max_date = df_filtered[date_col_name].max().date() if not df_filtered.empty else datetime.today().date()
+        end_date = st.date_input("Data de Fim", max_date, key=f"end_date_{global_key_suffix}")
+        
+    # --- CORREÇÃO DE FILTRAGEM DE DATA APLICADA AQUI (Global Weekly) ---
+    df_chart = df_filtered[
+        (df_filtered[date_col_name].dt.date >= start_date) & 
+        (df_filtered[date_col_name].dt.date <= end_date)
+    ].copy()
+    # FIM DA CORREÇÃO
+
+    y_axis_col = "Rank"
+    y_axis_title = "Posição no Ranking"
+    
+    image_url = None
+    artist_name = ''
+    if global_item_type == 'o artista':
+        artist_name = selected_item
+    elif global_item_type in ['a música', 'a faixa']:
+        artist_name_series = df[df[item_col] == selected_item]['Artista']
+        if not artist_name_series.empty:
+            artist_name = artist_name_series.iloc[0].split(',')[0].strip()
+    
+    if global_item_type == 'o artista':
+        image_url = get_artist_image(selected_item)
+    elif global_item_type in ['a música', 'a faixa']:
+        if artist_name:
+            image_url = get_track_album_image(selected_item, artist_name)
+            if not image_url:
+                image_url = get_artist_image(artist_name)
+    elif global_item_type == 'o álbum':
+        image_url = get_album_image(selected_item)
+    
+    if image_url:
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <img src="{image_url}" width=60 style="border-radius: 50%;">
+            <h3>{y_axis_title} de '{selected_item}' ao Longo do Tempo</h3>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
+        
+    fig = px.line(
+        df_chart, 
+        x=date_col_name,
+        y=y_axis_col,
+        text=y_axis_col,
+        line_shape='spline'
+    )
+    
+    fig.update_traces(textposition='top center')
+    
+    yaxis_config = {'title': y_axis_title}
+    if y_axis_col == 'Rank':
+        yaxis_config['autorange'] = 'reversed'
     
     fig.update_layout(
         xaxis_title="Dia",
@@ -577,16 +845,21 @@ st.markdown("---")
 col1, col2 = st.columns([1, 4])
 
 with col1:
-    st.image("habbla_rodape.jpg", width=110)
+    try:
+        rodape_image = Image.open("habbla_rodape.jpg")
+        st.image(rodape_image, width=110)
+    except FileNotFoundError:
+        st.write("Logo do rodapé não encontrada.")
+
 
 with col2:
     st.markdown(
         """
         <div style='font-size: 12px; color: gray;'>
-            Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2025 Habbla Marketing<br>
-            Versão 1.0.0 | Atualizado em: Setembro/2025<br>
-            <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
-            <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
+        Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2025 Habbla Marketing<br>
+        Versão 1.0.0 | Atualizado em: Setembro/2025<br>
+        <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
+        <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
         </div>
         """,
         unsafe_allow_html=True
