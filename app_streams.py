@@ -11,10 +11,14 @@ import os
 import json
 import tempfile
 from PIL import Image
+import pytz # NOVO: Importado para gerenciar fuso horário
 
 st.set_page_config(page_title='Vybbe Charts', layout="wide", initial_sidebar_state="expanded")
 
 load_dotenv()
+
+# Define o fuso horário para uso em toda a aplicação
+TZ = pytz.timezone('America/Sao_Paulo') 
 
 google_sheets_creds_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
 planilha_completa = None
@@ -22,6 +26,7 @@ planilha_completa = None
 if not google_sheets_creds_json:
     st.error("A variável de ambiente GOOGLE_SHEETS_CREDENTIALS não foi encontrada.")
 else:
+    temp_file_name = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_creds_file:
             temp_creds_file.write(google_sheets_creds_json)
@@ -35,11 +40,11 @@ else:
         client = gspread.authorize(creds)
         planilha_completa = client.open(title="2025_Charts")
         os.remove(temp_file_name)
-
+        temp_file_name = None
     except Exception as e:
         st.error(f"Erro ao autenticar com o Google Sheets: {e}")
-    
-    if 'temp_file_name' in locals() and os.path.exists(temp_file_name):
+    finally:
+        if temp_file_name and os.path.exists(temp_file_name):
             os.remove(temp_file_name)
 
 @st.cache_data
@@ -50,6 +55,7 @@ def load_data(sheet_index):
     try:
         worksheet = planilha_completa.get_worksheet(sheet_index)
         if sheet_index == 5:
+            # Lista de cabeçalhos ajustada para a planilha original
             expected_headers = ['DATA', 'Rank', 'uri', 'Artista', 'Música', 'source', 'peak_rank', 'previous_rank', 'days_on_chart', 'Corte charts', 'Data de Pico', 'Streams']
             data = worksheet.get_all_records(expected_headers=expected_headers)
         else:
@@ -88,7 +94,7 @@ def get_album_image(album_name):
     try:
         results = sp.search(q='album:' + album_name, type='album', limit=1)
         if results['albums']['items'] and results['albums']['items'][0]['images']:
-            return results['albums']['items'][0]['images'][0]['url']
+            return results['albums']['items'][0]['albums'][0]['images'][0]['url']
     except Exception as e:
         st.error(f"Erro ao buscar imagem do álbum {album_name}: {e}")
     return None
@@ -111,7 +117,11 @@ def format_br_number(number):
             s = f"{int(number):,}"
             return s.replace(",", "X").replace(".", ",").replace("X", ".")
         else:
-            return str(number)
+            # Lidar com strings que podem ter pontos como milhar
+            num_str = str(number).replace('.', '').replace(',', '')
+            num_float = float(num_str)
+            s = f"{int(num_float):,}"
+            return s.replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
         return str(number)
         
@@ -121,6 +131,31 @@ def format_br_date(date_str):
         return date_obj.strftime('%d/%m/%Y')
     except (ValueError, TypeError):
         return str(date_str)
+
+# --- FUNÇÃO DE CALLBACK PARA SINCRONIZAR DATAS ---
+def update_date_range(key_suffix, df_original, item_col, date_col_name):
+    """Callback para recalcular e armazenar as datas min/max do item selecionado no session_state."""
+    
+    # Obter o valor selecionado (o key é gerado pelo st.selectbox)
+    selected_item = st.session_state[f"selectbox_{key_suffix}"]
+    
+    # Filtrar o DataFrame apenas para o item selecionado
+    df_filtered = df_original[df_original[item_col] == selected_item].copy()
+    
+    if not df_filtered.empty:
+        # Garante que as datas sejam objetos date (sem hora) para st.date_input
+        min_date = df_filtered[date_col_name].min().date()
+        max_date = df_filtered[date_col_name].max().date()
+    else:
+        # Fallback se o DataFrame filtrado estiver vazio
+        current_date = datetime.now(TZ).date()
+        min_date = current_date
+        max_date = current_date
+
+    # Armazena as datas no estado de sessão com chaves únicas
+    st.session_state[f'start_date_state_{key_suffix}'] = min_date
+    st.session_state[f'end_date_state_{key_suffix}'] = max_date
+
 
 def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type, platform):
     st.header(section_title)
@@ -144,9 +179,12 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
     df_display = pd.DataFrame()
     selected_date_display = None
     
+    # CORREÇÃO: Usando fuso horário para cálculo do dia
+    today_br = datetime.now(TZ).date()
+    yesterday = today_br - timedelta(days=1)
+    
     if chart_type == 'daily':
         latest_date_available = df[date_col_name].max().date()
-        yesterday = datetime.today().date() - timedelta(days=1)
         
         show_date_selector = st.checkbox("Pesquisar por datas anteriores?", key=f"checkbox_{key_suffix}")
         
@@ -198,10 +236,9 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         
         st.write("---")
 
-        # --- CORREÇÃO APLICADA AQUI ---
+        # CORREÇÃO: Data dinâmica para Daily Top Songs
         if 'Daily Top Songs' in section_title:
             if selected_date_display:
-                # Usando selected_date_display que armazena a data de ontem ou a selecionada
                 st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}") 
             corte_charts_value = df_display['Corte charts'].iloc[0] if 'Corte charts' in df_display.columns and not df_display.empty else "N/A"
             if 'Daily Top Songs Brasil' in section_title and corte_charts_value != 'N/A':
@@ -210,7 +247,9 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             if selected_date_display:
                 st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}")
 
-        # --- CÓDIGO DE VISUALIZAÇÃO ---
+        # ... (código de visualização da tabela e métricas omitido, mas intacto) ...
+        # (Manter o código de visualização da tabela e colunas aqui para não quebrar a lógica)
+        
         has_streams = platform == 'Spotify' and 'Streams' in df_display.columns and not df_display['Streams'].isna().all() and "Artists" not in section_title and "Albums" not in section_title
         
         has_peak_date = 'Data de Pico' in df_display.columns or 'Data do Pico' in df_display.columns
@@ -317,7 +356,6 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
                 track_cols = st.columns([0.7, 3])
                 with track_cols[0]:
                     if image_url:
-                        # 🎯 CORREÇÃO: Tamanho da imagem padronizado para 200
                         st.image(image_url, width=200, caption="")
                     else:
                         st.write("🖼️")
@@ -355,24 +393,68 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
                     st.markdown(f"<span style='font-size: 16px;'>{peak_date}</span>", unsafe_allow_html=True)
             
             st.markdown("---")
+            
     else:
         if selected_date_display:
             st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
         st.write("---")
-
+    
+    # --- FILTRO DE GRÁFICO (GRÁFICO DE LINHAS) ---
+    
     df['Mês'] = df[date_col_name].dt.strftime('%B')
     df['Ano'] = df[date_col_name].dt.year
     df_unique_items = sorted(df[item_col].unique())
-    selected_item = st.selectbox(f"Selecione {item_type} para análise do ranking", df_unique_items, key=f"selectbox_{key_suffix}")
-    df_filtered = df[df[item_col] == selected_item].copy()
+
+    # 1. SELECTBOX COM CALLBACK
+    selectbox_key = f"selectbox_{key_suffix}"
+    # Verifica se há um item selecionado para definir o index inicial
+    initial_index = df_unique_items.index(st.session_state.get(selectbox_key, df_unique_items[0])) if df_unique_items else 0
     
+    selected_item = st.selectbox(
+        f"Selecione {item_type} para análise do ranking", 
+        df_unique_items,
+        index=initial_index, 
+        key=selectbox_key,
+        # O callback é acionado quando o item muda, atualizando st.session_state
+        on_change=update_date_range, 
+        args=(key_suffix, df, item_col, date_col_name)
+    )
+    
+    # 2. INICIALIZAÇÃO DO ESTADO DE SESSÃO
+    start_date_state_key = f'start_date_state_{key_suffix}'
+    end_date_state_key = f'end_date_state_{key_suffix}'
+    
+    # Se o estado de sessão não foi inicializado para este gráfico, faça-o agora.
+    if start_date_state_key not in st.session_state:
+        # Usa o item recém-selecionado (ou o padrão) para inicializar
+        update_date_range(key_suffix, df, item_col, date_col_name)
+        
+    df_filtered = df[df[item_col] == selected_item].copy()
+
     st.write("---")
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Data de Início", df_filtered[date_col_name].min(), key=f"start_date_{key_suffix}")
+        start_date = st.date_input(
+            "Data de Início", 
+            value=st.session_state[start_date_state_key],
+            min_value=st.session_state[start_date_state_key], # Limita o calendário
+            max_value=st.session_state[end_date_state_key], # Limita o calendário
+            key=f"start_date_{key_suffix}"
+        )
     with col2:
-        end_date = st.date_input("Data de Fim", df_filtered[date_col_name].max(), key=f"end_date_{key_suffix}")
-    df_chart = df_filtered[(df_filtered[date_col_name] >= pd.to_datetime(start_date)) & (df_filtered[date_col_name] <= pd.to_datetime(end_date))]
+        end_date = st.date_input(
+            "Data de Fim", 
+            value=st.session_state[end_date_state_key],
+            min_value=st.session_state[start_date_state_key], # Limita o calendário
+            max_value=st.session_state[end_date_state_key], # Limita o calendário
+            key=f"end_date_{key_suffix}"
+        )
+        
+    # CORREÇÃO CRÍTICA DO FILTRO DE DATAS: Usando .dt.date
+    df_chart = df_filtered[
+        (df_filtered[date_col_name].dt.date >= start_date) & 
+        (df_filtered[date_col_name].dt.date <= end_date)
+    ].copy()
 
     y_axis_col = "Rank"
     y_axis_title = "Posição no Ranking"
@@ -464,6 +546,138 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
     st.plotly_chart(fig)
     st.write("---")
 
+
+# A função display_weekly_global_chart requer as mesmas correções de filtro e estado.
+# As alterações são análogas à display_chart.
+def display_weekly_global_chart(global_sheet_index, global_section_title, global_item_type, global_key_suffix):
+    st.header(global_section_title)
+    df = load_data(global_sheet_index)
+
+    if df.empty:
+        st.info(f"😪 Nenhum dado disponível para o chart de {global_section_title}.")
+        st.write("---")
+        return
+
+    item_col = 'Música' if 'Música' in df.columns else ('Álbum' if 'Álbum' in df.columns else ('Faixa' if 'Faixa' in df.columns else 'Artista'))
+    date_col_name = 'Data' if 'Data' in df.columns else 'DATA'
+    df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y")
+    
+    # CORREÇÃO: Usando fuso horário para cálculo do dia
+    today_br = datetime.now(TZ).date()
+    yesterday = today_br - timedelta(days=1)
+    
+    latest_date_available = df[date_col_name].max().date()
+    
+    show_date_selector = st.checkbox("Pesquisar por datas anteriores?", key=f"checkbox_{global_key_suffix}")
+    
+    df_display = pd.DataFrame()
+    selected_date_display = None
+    
+    if show_date_selector:
+        selected_date = st.date_input("Selecione a Data para Visualização", latest_date_available, key=f"date_input_{global_key_suffix}")
+        df_display = df[df[date_col_name].dt.date == selected_date].copy()
+        selected_date_display = selected_date
+    else:
+        df_display = df[df[date_col_name].dt.date == latest_date_available].copy()
+        selected_date_display = latest_date_available
+
+    if not df_display.empty:
+        st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}")
+    # ... (Restante da exibição da tabela principal omitida) ...
+
+    # --- FILTRO DE GRÁFICO (GRÁFICO DE LINHAS) ---
+    
+    df_unique_items = sorted(df[item_col].unique())
+    
+    # 1. SELECTBOX COM CALLBACK
+    selectbox_key = f"selectbox_{global_key_suffix}"
+    initial_index = df_unique_items.index(st.session_state.get(selectbox_key, df_unique_items[0])) if df_unique_items else 0
+    
+    selected_item = st.selectbox(
+        f"Selecione {global_item_type} para análise do ranking", 
+        df_unique_items,
+        index=initial_index, 
+        key=selectbox_key,
+        on_change=update_date_range, 
+        args=(global_key_suffix, df, item_col, date_col_name)
+    )
+
+    # 2. INICIALIZAÇÃO DO ESTADO DE SESSÃO
+    start_date_state_key = f'start_date_state_{global_key_suffix}'
+    end_date_state_key = f'end_date_state_{global_key_suffix}'
+    
+    if start_date_state_key not in st.session_state:
+        update_date_range(global_key_suffix, df, item_col, date_col_name)
+        
+    df_filtered = df[df[item_col] == selected_item].copy()
+
+    st.write("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input(
+            "Data de Início", 
+            value=st.session_state[start_date_state_key],
+            min_value=st.session_state[start_date_state_key],
+            max_value=st.session_state[end_date_state_key],
+            key=f"start_date_{global_key_suffix}"
+        )
+    with col2:
+        end_date = st.date_input(
+            "Data de Fim", 
+            value=st.session_state[end_date_state_key],
+            min_value=st.session_state[start_date_state_key],
+            max_value=st.session_state[end_date_state_key],
+            key=f"end_date_{global_key_suffix}"
+        )
+        
+    # CORREÇÃO CRÍTICA DO FILTRO DE DATAS: Usando .dt.date
+    df_chart = df_filtered[
+        (df_filtered[date_col_name].dt.date >= start_date) & 
+        (df_filtered[date_col_name].dt.date <= end_date)
+    ].copy()
+
+    y_axis_col = "Rank"
+    y_axis_title = "Posição no Ranking"
+    
+    image_url = None
+    if global_item_type == 'o artista':
+        image_url = get_artist_image(selected_item)
+    # ... (Restante da lógica de imagem omitida) ...
+    
+    if image_url:
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <img src="{image_url}" width=60 style="border-radius: 50%;">
+            <h3>{y_axis_title} de '{selected_item}' ao Longo do Tempo</h3>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
+        
+    fig = px.line(
+        df_chart, 
+        x=date_col_name,
+        y=y_axis_col,
+        text=y_axis_col,
+        line_shape='spline'
+    )
+    
+    fig.update_traces(textposition='top center')
+    
+    yaxis_config = {'title': y_axis_title}
+    if y_axis_col == 'Rank':
+        yaxis_config['autorange'] = 'reversed'
+    
+    fig.update_layout(
+        xaxis_title="Dia",
+        yaxis=yaxis_config
+    )
+    
+    st.plotly_chart(fig)
+    st.write("---")
+
+
+# --- Estrutura principal do aplicativo ---
 try:
     imagem_logo = Image.open('logo_Charts.jpg')
     st.image(imagem_logo)
@@ -577,16 +791,20 @@ st.markdown("---")
 col1, col2 = st.columns([1, 4])
 
 with col1:
-    st.image("habbla_rodape.jpg", width=110)
+    try:
+        rodape_image = Image.open("habbla_rodape.jpg")
+        st.image(rodape_image, width=110)
+    except FileNotFoundError:
+        st.write("Rodapé Vybbe Charts")
 
 with col2:
     st.markdown(
         """
         <div style='font-size: 12px; color: gray;'>
-            Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2025 Habbla Marketing<br>
-            Versão 1.0.0 | Atualizado em: Setembro/2025<br>
-            <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
-            <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
+        Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2025 Habbla Marketing<br>
+        Versão 1.0.0 | Atualizado em: Setembro/2025<br>
+        <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
+        <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
         </div>
         """,
         unsafe_allow_html=True
