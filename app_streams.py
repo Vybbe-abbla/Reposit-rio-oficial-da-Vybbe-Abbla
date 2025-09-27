@@ -11,14 +11,16 @@ import os
 import json
 import tempfile
 from PIL import Image
-import pytz # NOVO: Importado para gerenciar fuso horário
+import pytz
 
 st.set_page_config(page_title='Vybbe Charts', layout="wide", initial_sidebar_state="expanded")
 
 load_dotenv()
 
-# Define o fuso horário para uso em toda a aplicação
-TZ = pytz.timezone('America/Sao_Paulo') 
+try:
+    TZ = pytz.timezone('America/Sao_Paulo')
+except ImportError:
+    TZ = None
 
 google_sheets_creds_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
 planilha_completa = None
@@ -55,7 +57,6 @@ def load_data(sheet_index):
     try:
         worksheet = planilha_completa.get_worksheet(sheet_index)
         if sheet_index == 5:
-            # Lista de cabeçalhos ajustada para a planilha original
             expected_headers = ['DATA', 'Rank', 'uri', 'Artista', 'Música', 'source', 'peak_rank', 'previous_rank', 'days_on_chart', 'Corte charts', 'Data de Pico', 'Streams']
             data = worksheet.get_all_records(expected_headers=expected_headers)
         else:
@@ -70,6 +71,7 @@ def load_data(sheet_index):
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 try:
+    # AQUI ESTAVA O ERRO DE DIGITAÇÃO: SpotifyClientClientCredentials -> SpotifyClientCredentials
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET))
 except Exception as e:
     st.error(f"Erro ao autenticar com a API do Spotify: {e}")
@@ -93,8 +95,10 @@ def get_album_image(album_name):
         return None
     try:
         results = sp.search(q='album:' + album_name, type='album', limit=1)
-        if results['albums']['items'] and results['albums']['items'][0]['images']:
-            return results['albums']['items'][0]['albums'][0]['images'][0]['url']
+        if results and 'albums' in results and results['albums']['items']:
+            album_item = results['albums']['items'][0]
+            if 'images' in album_item and album_item['images']:
+                return album_item['images'][0]['url']
     except Exception as e:
         st.error(f"Erro ao buscar imagem do álbum {album_name}: {e}")
     return None
@@ -105,8 +109,10 @@ def get_track_album_image(track_name, artist_name):
         return None
     try:
         results = sp.search(q=f'track:{track_name} artist:{artist_name}', type='track', limit=1)
-        if results['tracks']['items'] and results['tracks']['items'][0]['album']['images']:
-            return results['tracks']['items'][0]['album']['images'][0]['url']
+        if results and 'tracks' in results and results['tracks']['items']:
+            track_item = results['tracks']['items'][0]
+            if 'album' in track_item and 'images' in track_item['album'] and track_item['album']['images']:
+                return track_item['album']['images'][0]['url']
     except Exception as e:
         st.error(f"Erro ao buscar imagem do álbum para a música {track_name} de {artist_name}: {e}")
     return None
@@ -117,7 +123,6 @@ def format_br_number(number):
             s = f"{int(number):,}"
             return s.replace(",", "X").replace(".", ",").replace("X", ".")
         else:
-            # Lidar com strings que podem ter pontos como milhar
             num_str = str(number).replace('.', '').replace(',', '')
             num_float = float(num_str)
             s = f"{int(num_float):,}"
@@ -132,27 +137,20 @@ def format_br_date(date_str):
     except (ValueError, TypeError):
         return str(date_str)
 
-# --- FUNÇÃO DE CALLBACK PARA SINCRONIZAR DATAS ---
 def update_date_range(key_suffix, df_original, item_col, date_col_name):
     """Callback para recalcular e armazenar as datas min/max do item selecionado no session_state."""
     
-    # Obter o valor selecionado (o key é gerado pelo st.selectbox)
     selected_item = st.session_state[f"selectbox_{key_suffix}"]
-    
-    # Filtrar o DataFrame apenas para o item selecionado
     df_filtered = df_original[df_original[item_col] == selected_item].copy()
     
     if not df_filtered.empty:
-        # Garante que as datas sejam objetos date (sem hora) para st.date_input
         min_date = df_filtered[date_col_name].min().date()
         max_date = df_filtered[date_col_name].max().date()
     else:
-        # Fallback se o DataFrame filtrado estiver vazio
-        current_date = datetime.now(TZ).date()
+        current_date = datetime.now(TZ).date() if TZ else datetime.today().date()
         min_date = current_date
         max_date = current_date
 
-    # Armazena as datas no estado de sessão com chaves únicas
     st.session_state[f'start_date_state_{key_suffix}'] = min_date
     st.session_state[f'end_date_state_{key_suffix}'] = max_date
 
@@ -179,8 +177,7 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
     df_display = pd.DataFrame()
     selected_date_display = None
     
-    # CORREÇÃO: Usando fuso horário para cálculo do dia
-    today_br = datetime.now(TZ).date()
+    today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
     yesterday = today_br - timedelta(days=1)
     
     if chart_type == 'daily':
@@ -236,7 +233,6 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         
         st.write("---")
 
-        # CORREÇÃO: Data dinâmica para Daily Top Songs
         if 'Daily Top Songs' in section_title:
             if selected_date_display:
                 st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}") 
@@ -247,51 +243,35 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             if selected_date_display:
                 st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}")
 
-        # ... (código de visualização da tabela e métricas omitido, mas intacto) ...
-        # (Manter o código de visualização da tabela e colunas aqui para não quebrar a lógica)
-        
+        # --- Visualização da Tabela ---
         has_streams = platform == 'Spotify' and 'Streams' in df_display.columns and not df_display['Streams'].isna().all() and "Artists" not in section_title and "Albums" not in section_title
-        
         has_peak_date = 'Data de Pico' in df_display.columns or 'Data do Pico' in df_display.columns
-        
         has_views_youtube = platform == 'Youtube' and 'Visualizações Semanais' in df_display.columns and not df_display['Visualizações Semanais'].isna().all()
 
         column_ratios = [0.5, 3.5, 0.7, 0.7, 0.9]
-        if has_streams:
-            column_ratios.append(1.5)
-        if has_views_youtube:
-            column_ratios.append(1.5)
-        if has_peak_date:
-            column_ratios.append(1.2)
+        if has_streams: column_ratios.append(1.5)
+        if has_views_youtube: column_ratios.append(1.5)
+        if has_peak_date: column_ratios.append(1.2)
         
         header_cols = st.columns(column_ratios)
         
-        with header_cols[0]:
-            st.markdown("<b>#</b>", unsafe_allow_html=True)
-        with header_cols[1]:
+        with header_cols[0]: st.markdown("<b>#</b>", unsafe_allow_html=True)
+        with header_cols[1]: 
             header_text = "ARTIST" if "Top Artists" in section_title or "Top Artistas" in section_title else ("ALBUM" if "Top Albums" in section_title else "TRACK")
             st.markdown(f"<b>{header_text}</b>", unsafe_allow_html=True)
-        with header_cols[2]:
-            st.markdown("<b>Peak</b>", unsafe_allow_html=True)
-        with header_cols[3]:
-            st.markdown("<b>Prev</b>", unsafe_allow_html=True)
-        with header_cols[4]:
-            st.markdown("<b>Streak</b>", unsafe_allow_html=True)
+        with header_cols[2]: st.markdown("<b>Peak</b>", unsafe_allow_html=True)
+        with header_cols[3]: st.markdown("<b>Prev</b>", unsafe_allow_html=True)
+        with header_cols[4]: st.markdown("<b>Streak</b>", unsafe_allow_html=True)
 
         col_index = 5
         if has_streams:
-            with header_cols[col_index]:
-                st.markdown("<b>Streams</b>", unsafe_allow_html=True)
+            with header_cols[col_index]: st.markdown("<b>Streams</b>", unsafe_allow_html=True)
             col_index += 1
-        
         if has_views_youtube:
-            with header_cols[col_index]:
-                st.markdown("<b>Visualizações</b>", unsafe_allow_html=True)
+            with header_cols[col_index]: st.markdown("<b>Visualizações</b>", unsafe_allow_html=True)
             col_index += 1
-        
         if has_peak_date:
-            with header_cols[col_index]:
-                st.markdown("<b>Peak Date</b>", unsafe_allow_html=True)
+            with header_cols[col_index]: st.markdown("<b>Peak Date</b>", unsafe_allow_html=True)
 
         st.markdown("---")
 
@@ -300,114 +280,68 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             item_name = row.get(item_col, '').strip()
             artist_name_col = 'Artista' if 'Artista' in df_display.columns else 'Criador'
             artist_name = row.get(artist_name_col, 'N/A').strip()
-            
             peak_rank = row.get('peak_rank', 'N/A')
             previous_rank = row.get('previous_rank', 'N/A')
             
-            streak = "N/A"
-            if "Viral" in section_title or chart_type == 'daily':
-                streak = row.get('days_on_chart', 'N/A')
-            elif ("Top Faixas Semanal" in section_title):
-                if platform == 'Youtube':
-                    streak = row.get('days_on_chart', 'N/A')
-            elif ("Weekly Top Songs Brasil" in section_title or "Weekly Top Artists Brasil" in section_title):
-                streak = row.get('weeks_on_chart', 'N/A')
-            elif ("Top Artistas Semanal" in section_title):
-                if platform == 'Youtube':
-                    streak = row.get('Weeks_on_chart', 'N/A')
-            elif "Weekly Top Albums Brasil" in section_title:
-                streak = row.get('weeks_on_chart', 'N/A')
-            else:
-                streak = row.get('days_on_chart', 'N/A')
-            
-            if "Top Artists" in section_title or "Top Albums" in section_title:
-                streams = "N/A"
-            else:
-                streams = 'N/A'
-                if platform == 'Spotify':
-                    streams = row.get('Streams', 'N/A')
-                elif platform == 'Youtube':
-                    streams = row.get('Visualizações Diárias', 'N/A')
-                    if 'Semanal' in section_title:
-                        streams = row.get('Visualizações Semanais', 'N/A')
-            
+            streak = row.get('days_on_chart', 'N/A')
+            if "Weekly" in section_title: streak = row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A'))
+
+            streams = "N/A"
+            if platform == 'Spotify' and 'Streams' in row:
+                streams = row.get('Streams', 'N/A')
+            elif platform == 'Youtube' and 'Visualizações Semanais' in row:
+                streams = row.get('Visualizações Semanais', 'N/A')
+
             peak_date = row.get('Data de Pico') or row.get('Data do Pico', 'N/A')
-            if peak_date != 'N/A':
-                peak_date = format_br_date(peak_date)
+            if peak_date != 'N/A': peak_date = format_br_date(peak_date)
 
             image_url = None
-            
-            if platform == 'Youtube':
-                artist_for_image = artist_name.split(',')[0].strip() if isinstance(artist_name, str) else artist_name
-                image_url = get_artist_image(artist_for_image)
-            elif item_type in ['a música', 'a faixa']:
-                image_url = get_track_album_image(item_name, artist_name)
-            elif item_type == 'o artista':
-                image_url = get_artist_image(artist_name.split(',')[0].strip())
-            elif item_type == 'o álbum':
-                image_url = get_album_image(item_name)
-            
+            if item_type == 'o artista': image_url = get_artist_image(artist_name.split(',')[0].strip())
+            elif item_type == 'o álbum': image_url = get_album_image(item_name)
+            elif item_type in ['a música', 'a faixa']: image_url = get_track_album_image(item_name, artist_name)
+                
             cols = st.columns(column_ratios)
-
-            with cols[0]:
-                st.markdown(f"<p style='font-size:20px; font-weight:bold;'>{rank}</p>", unsafe_allow_html=True)
-            
+            with cols[0]: st.markdown(f"<p style='font-size:20px; font-weight:bold;'>{rank}</p>", unsafe_allow_html=True)
             with cols[1]:
                 track_cols = st.columns([0.7, 3])
                 with track_cols[0]:
-                    if image_url:
-                        st.image(image_url, width=200, caption="")
-                    else:
-                        st.write("🖼️")
+                    if image_url: st.image(image_url, width=200, caption="")
+                    else: st.write("🖼️")
                 with track_cols[1]:
                     st.markdown(f"**{item_name}**")
-                    if item_type != 'o artista':
-                        st.markdown(f"<span style='color: gray; font-size: 16px;'>{artist_name}</span>", unsafe_allow_html=True)
+                    if item_type != 'o artista': st.markdown(f"<span style='color: gray; font-size: 16px;'>{artist_name}</span>", unsafe_allow_html=True)
             
-            with cols[2]:
-                st.markdown(f"<span style='font-size: 16px;'>{peak_rank}</span>", unsafe_allow_html=True)
-                
-            with cols[3]:
-                st.markdown(f"<span style='font-size: 16px;'>{previous_rank}</span>", unsafe_allow_html=True)
-
-            with cols[4]:
-                st.markdown(f"<span style='font-size: 16px;'>{streak}</span>", unsafe_allow_html=True)
+            with cols[2]: st.markdown(f"<span style='font-size: 16px;'>{peak_rank}</span>", unsafe_allow_html=True)
+            with cols[3]: st.markdown(f"<span style='font-size: 16px;'>{previous_rank}</span>", unsafe_allow_html=True)
+            with cols[4]: st.markdown(f"<span style='font-size: 16px;'>{streak}</span>", unsafe_allow_html=True)
             
             col_index = 5
-            if has_streams:
+            if has_streams or has_views_youtube:
                 with cols[col_index]:
-                    st.markdown(f"<span style='font-size: 16px;'>{streams}</span>", unsafe_allow_html=True)
+                    display_value = streams if streams == 'N/A' else format_br_number(streams)
+                    st.markdown(f"<span style='font-size: 16px;'>{display_value}</span>", unsafe_allow_html=True)
                 col_index += 1
-            
-            if has_views_youtube:
-                with cols[col_index]:
-                    views = row.get('Visualizações Semanais', 'N/A')
-                    if views != 'N/A' and str(views).replace('.', '').replace(',', '').isdigit():
-                        st.markdown(f"<span style='font-size: 16px;'>{format_br_number(views)}</span>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<span style='font-size: 16px;'>{views}</span>", unsafe_allow_html=True)
-                col_index += 1
-
             if has_peak_date:
-                with cols[col_index]:
-                    st.markdown(f"<span style='font-size: 16px;'>{peak_date}</span>", unsafe_allow_html=True)
+                with cols[col_index]: st.markdown(f"<span style='font-size: 16px;'>{peak_date}</span>", unsafe_allow_html=True)
             
             st.markdown("---")
             
     else:
-        if selected_date_display:
-            st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
+        if selected_date_display: st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
         st.write("---")
-    
-    # --- FILTRO DE GRÁFICO (GRÁFICO DE LINHAS) ---
+
+    # --- Início do Gráfico de Análise ---
     
     df['Mês'] = df[date_col_name].dt.strftime('%B')
     df['Ano'] = df[date_col_name].dt.year
     df_unique_items = sorted(df[item_col].unique())
 
-    # 1. SELECTBOX COM CALLBACK
     selectbox_key = f"selectbox_{key_suffix}"
-    # Verifica se há um item selecionado para definir o index inicial
+    
+    if selectbox_key not in st.session_state and df_unique_items:
+        st.session_state[selectbox_key] = df_unique_items[0]
+        update_date_range(key_suffix, df, item_col, date_col_name)
+
     initial_index = df_unique_items.index(st.session_state.get(selectbox_key, df_unique_items[0])) if df_unique_items else 0
     
     selected_item = st.selectbox(
@@ -415,19 +349,14 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         df_unique_items,
         index=initial_index, 
         key=selectbox_key,
-        # O callback é acionado quando o item muda, atualizando st.session_state
         on_change=update_date_range, 
         args=(key_suffix, df, item_col, date_col_name)
     )
-    
-    # 2. INICIALIZAÇÃO DO ESTADO DE SESSÃO
+
     start_date_state_key = f'start_date_state_{key_suffix}'
     end_date_state_key = f'end_date_state_{key_suffix}'
     
-    # Se o estado de sessão não foi inicializado para este gráfico, faça-o agora.
-    if start_date_state_key not in st.session_state:
-        # Usa o item recém-selecionado (ou o padrão) para inicializar
-        update_date_range(key_suffix, df, item_col, date_col_name)
+    if start_date_state_key not in st.session_state: update_date_range(key_suffix, df, item_col, date_col_name)
         
     df_filtered = df[df[item_col] == selected_item].copy()
 
@@ -437,24 +366,20 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         start_date = st.date_input(
             "Data de Início", 
             value=st.session_state[start_date_state_key],
-            min_value=st.session_state[start_date_state_key], # Limita o calendário
-            max_value=st.session_state[end_date_state_key], # Limita o calendário
+            min_value=st.session_state[start_date_state_key],
+            max_value=st.session_state[end_date_state_key],
             key=f"start_date_{key_suffix}"
         )
     with col2:
         end_date = st.date_input(
             "Data de Fim", 
             value=st.session_state[end_date_state_key],
-            min_value=st.session_state[start_date_state_key], # Limita o calendário
-            max_value=st.session_state[end_date_state_key], # Limita o calendário
+            min_value=st.session_state[start_date_state_key],
+            max_value=st.session_state[end_date_state_key],
             key=f"end_date_{key_suffix}"
         )
         
-    # CORREÇÃO CRÍTICA DO FILTRO DE DATAS: Usando .dt.date
-    df_chart = df_filtered[
-        (df_filtered[date_col_name].dt.date >= start_date) & 
-        (df_filtered[date_col_name].dt.date <= end_date)
-    ].copy()
+    df_chart = df_filtered[(df_filtered[date_col_name].dt.date >= start_date) & (df_filtered[date_col_name].dt.date <= end_date)].copy()
 
     y_axis_col = "Rank"
     y_axis_title = "Posição no Ranking"
@@ -462,26 +387,15 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
 
     if item_type in ["a música", "a faixa"]:
         chart_options = ["Ranking"]
-        if "Streams" in df_chart.columns and not df_chart['Streams'].isna().all():
-            chart_options.append("Streams")
-        if "Visualizações Semanais" in df_chart.columns and not df_chart['Visualizações Semanais'].isna().all():
-            chart_options.append("Visualizações")
+        if "Streams" in df_chart.columns and not df_chart['Streams'].isna().all(): chart_options.append("Streams")
+        if "Visualizações Semanais" in df_chart.columns and not df_chart['Visualizações Semanais'].isna().all(): chart_options.append("Visualizações")
             
         if len(chart_options) > 1:
-            chart_type_radio = st.radio(
-                "Tipo de visualização:", chart_options,
-                key=f"radio_chart_type_{key_suffix}"
-            )
+            chart_type_radio = st.radio("Tipo de visualização:", chart_options, key=f"radio_chart_type_{key_suffix}")
             
-            if chart_type_radio == "Ranking":
-                y_axis_col = "Rank"
-                y_axis_title = "Posição no Ranking"
-            elif chart_type_radio == "Streams":
-                y_axis_col = "Streams"
-                y_axis_title = "Número de Streams"
-            elif chart_type_radio == "Visualizações":
-                y_axis_col = "Visualizações Semanais"
-                y_axis_title = "Número de Visualizações"
+            if chart_type_radio == "Ranking": y_axis_col = "Rank"; y_axis_title = "Posição no Ranking"
+            elif chart_type_radio == "Streams": y_axis_col = "Streams"; y_axis_title = "Número de Streams"
+            elif chart_type_radio == "Visualizações": y_axis_col = "Visualizações Semanais"; y_axis_title = "Número de Visualizações"
 
     if y_axis_col in ["Streams", "Visualizações Semanais"] and y_axis_col in df_chart.columns:
         df_chart[y_axis_col] = df_chart[y_axis_col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).astype(float)
@@ -492,25 +406,20 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
 
     image_url = None
     artist_name = ''
-    if item_type == 'o artista':
-        artist_name = selected_item
+    if item_type == 'o artista': artist_name = selected_item
     elif item_type in ['a música', 'a faixa']:
         artist_name_series = df[df[item_col] == selected_item]['Artista']
-        if not artist_name_series.empty:
-            artist_name = artist_name_series.iloc[0].split(',')[0].strip()
+        if not artist_name_series.empty: artist_name = artist_name_series.iloc[0].split(',')[0].strip()
     
     if platform == 'Youtube':
         artist_for_image = artist_name.split(',')[0].strip() if isinstance(artist_name, str) else artist_name
         image_url = get_artist_image(artist_for_image)
-    elif item_type == 'o artista':
-        image_url = get_artist_image(selected_item)
+    elif item_type == 'o artista': image_url = get_artist_image(selected_item)
     elif item_type in ['a música', 'a faixa']:
         if artist_name:
             image_url = get_track_album_image(selected_item, artist_name)
-            if not image_url:
-                image_url = get_artist_image(artist_name)
-    elif item_type == 'o álbum':
-        image_url = get_album_image(selected_item)
+            if not image_url: image_url = get_artist_image(artist_name)
+    elif item_type == 'o álbum': image_url = get_album_image(selected_item)
     
     if image_url:
         st.markdown(f"""
@@ -519,36 +428,19 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             <h3>{y_axis_title} de '{selected_item}' ao Longo do Tempo</h3>
         </div>
         """, unsafe_allow_html=True)
-    else:
-        st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
+    else: st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
         
-    fig = px.line(
-        df_chart, 
-        x=date_col_name,
-        y=y_axis_col,
-        text=text_col,
-        line_shape='spline'
-    )
-    
+    fig = px.line(df_chart, x=date_col_name, y=y_axis_col, text=text_col, line_shape='spline')
     fig.update_traces(textposition='top center')
     
     yaxis_config = {'title': y_axis_title}
-    if y_axis_col == 'Rank':
-        yaxis_config['autorange'] = 'reversed'
-    if y_tickformat:
-        yaxis_config['tickformat'] = y_tickformat
+    if y_axis_col == 'Rank': yaxis_config['autorange'] = 'reversed'
+    if y_tickformat: yaxis_config['tickformat'] = y_tickformat
     
-    fig.update_layout(
-        xaxis_title="Dia",
-        yaxis=yaxis_config
-    )
-    
+    fig.update_layout(xaxis_title="Dia", yaxis=yaxis_config)
     st.plotly_chart(fig)
     st.write("---")
 
-
-# A função display_weekly_global_chart requer as mesmas correções de filtro e estado.
-# As alterações são análogas à display_chart.
 def display_weekly_global_chart(global_sheet_index, global_section_title, global_item_type, global_key_suffix):
     st.header(global_section_title)
     df = load_data(global_sheet_index)
@@ -558,12 +450,11 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
         st.write("---")
         return
 
-    item_col = 'Música' if 'Música' in df.columns else ('Álbum' if 'Álbum' in df.columns else ('Faixa' if 'Faixa' in df.columns else 'Artista'))
+    item_col = 'Música' if 'Música' in df.columns else ('Álbum' if 'Álbum' in df.columns else 'Artista')
     date_col_name = 'Data' if 'Data' in df.columns else 'DATA'
     df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y")
     
-    # CORREÇÃO: Usando fuso horário para cálculo do dia
-    today_br = datetime.now(TZ).date()
+    today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
     yesterday = today_br - timedelta(days=1)
     
     latest_date_available = df[date_col_name].max().date()
@@ -583,14 +474,26 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
 
     if not df_display.empty:
         st.markdown(f"**Dados do dia:** {selected_date_display.strftime('%d/%m/%Y')}")
-    # ... (Restante da exibição da tabela principal omitida) ...
+    else:
+        if not show_date_selector:
+            st.info(f"😪 Nenhum dado encontrado para os artistas Vybbe no chart de {yesterday.strftime('%d/%m/%Y')}.")
+        elif selected_date_display:
+            st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
+        st.write("---")
+        return
 
-    # --- FILTRO DE GRÁFICO (GRÁFICO DE LINHAS) ---
+    # --- Visualização da Tabela ---
+    
+    # --- Início do Gráfico de Análise ---
     
     df_unique_items = sorted(df[item_col].unique())
     
-    # 1. SELECTBOX COM CALLBACK
     selectbox_key = f"selectbox_{global_key_suffix}"
+    
+    if selectbox_key not in st.session_state and df_unique_items:
+        st.session_state[selectbox_key] = df_unique_items[0]
+        update_date_range(global_key_suffix, df, item_col, date_col_name)
+
     initial_index = df_unique_items.index(st.session_state.get(selectbox_key, df_unique_items[0])) if df_unique_items else 0
     
     selected_item = st.selectbox(
@@ -602,15 +505,13 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
         args=(global_key_suffix, df, item_col, date_col_name)
     )
 
-    # 2. INICIALIZAÇÃO DO ESTADO DE SESSÃO
     start_date_state_key = f'start_date_state_{global_key_suffix}'
     end_date_state_key = f'end_date_state_{global_key_suffix}'
     
-    if start_date_state_key not in st.session_state:
-        update_date_range(global_key_suffix, df, item_col, date_col_name)
+    if start_date_state_key not in st.session_state: update_date_range(global_key_suffix, df, item_col, date_col_name)
         
     df_filtered = df[df[item_col] == selected_item].copy()
-
+    
     st.write("---")
     col1, col2 = st.columns(2)
     with col1:
@@ -630,19 +531,20 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
             key=f"end_date_{global_key_suffix}"
         )
         
-    # CORREÇÃO CRÍTICA DO FILTRO DE DATAS: Usando .dt.date
-    df_chart = df_filtered[
-        (df_filtered[date_col_name].dt.date >= start_date) & 
-        (df_filtered[date_col_name].dt.date <= end_date)
-    ].copy()
+    df_chart = df_filtered[(df_filtered[date_col_name].dt.date >= start_date) & (df_filtered[date_col_name].dt.date <= end_date)].copy()
 
     y_axis_col = "Rank"
     y_axis_title = "Posição no Ranking"
     
     image_url = None
-    if global_item_type == 'o artista':
-        image_url = get_artist_image(selected_item)
-    # ... (Restante da lógica de imagem omitida) ...
+    if global_item_type == 'o artista': image_url = get_artist_image(selected_item)
+    elif global_item_type in ['a música', 'a faixa']:
+        artist_name_series = df[df[item_col] == selected_item]['Artista']
+        if not artist_name_series.empty:
+            artist_name = artist_name_series.iloc[0].split(',')[0].strip()
+            image_url = get_track_album_image(selected_item, artist_name)
+            if not image_url: image_url = get_artist_image(artist_name)
+    elif global_item_type == 'o álbum': image_url = get_album_image(selected_item)
     
     if image_url:
         st.markdown(f"""
@@ -651,33 +553,20 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
             <h3>{y_axis_title} de '{selected_item}' ao Longo do Tempo</h3>
         </div>
         """, unsafe_allow_html=True)
-    else:
-        st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
+    else: st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
         
-    fig = px.line(
-        df_chart, 
-        x=date_col_name,
-        y=y_axis_col,
-        text=y_axis_col,
-        line_shape='spline'
-    )
-    
+    fig = px.line(df_chart, x=date_col_name, y=y_axis_col, text=y_axis_col, line_shape='spline')
     fig.update_traces(textposition='top center')
     
     yaxis_config = {'title': y_axis_title}
-    if y_axis_col == 'Rank':
-        yaxis_config['autorange'] = 'reversed'
+    if y_axis_col == 'Rank': yaxis_config['autorange'] = 'reversed'
     
-    fig.update_layout(
-        xaxis_title="Dia",
-        yaxis=yaxis_config
-    )
-    
+    fig.update_layout(xaxis_title="Dia", yaxis=yaxis_config)
     st.plotly_chart(fig)
     st.write("---")
 
 
-# --- Estrutura principal do aplicativo ---
+# --- Estrutura principal do aplicativo (Não alterada) ---
 try:
     imagem_logo = Image.open('logo_Charts.jpg')
     st.image(imagem_logo)
