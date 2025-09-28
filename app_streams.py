@@ -117,15 +117,20 @@ def get_track_album_image(track_name, artist_name):
     return None
 
 def format_br_number(number):
-    # --- CORREÇÃO FINAL APLICADA AQUI: LIMPEZA TOTAL PARA INTEIRO E REFORMATAÇÃO BR ---
+    # --- FUNÇÃO CORRIGIDA PARA O PADRÃO BRASILEIRO (1.234.567) ---
     try:
-        # 1. Converte o número para string e remove **todos** os separadores de milhar/decimal
-        num_str_clean = str(number).replace('.', '').replace(',', '')
+        num_str = str(number)
         
-        # 2. Converte para INT. Isso garante que o número completo seja preservado.
-        num_int = int(num_str_clean)
+        # 1. Limpa o número: remove todos os separadores para obter o valor inteiro
+        if ',' in num_str:
+            num_str_clean = num_str.replace('.', '').replace(',', '.')
+        else:
+            num_str_clean = num_str.replace('.', '')
+            
+        # 2. Converte para o número inteiro completo (e.g., 291900)
+        num_int = int(float(num_str_clean))
         
-        # 3. Formata o número inteiro com separador de milhar (,)
+        # 3. Formata o número inteiro com separador de milhar (,) (padrão Python/internacional)
         s = f"{num_int:,}"
         
         # 4. Converte para o padrão brasileiro (ponto como separador de milhar)
