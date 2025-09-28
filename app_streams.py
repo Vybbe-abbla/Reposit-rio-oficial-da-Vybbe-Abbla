@@ -71,6 +71,7 @@ def load_data(sheet_index):
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 try:
+    # AQUI ESTAVA O ERRO DE DIGITAÇÃO: SpotifyClientClientCredentials -> SpotifyClientCredentials
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET))
 except Exception as e:
     st.error(f"Erro ao autenticar com a API do Spotify: {e}")
@@ -117,24 +118,15 @@ def get_track_album_image(track_name, artist_name):
     return None
 
 def format_br_number(number):
-    # --- FUNÇÃO CORRIGIDA PARA O PADRÃO BRASILEIRO (1.234.567) ---
     try:
-        num_str = str(number)
-        
-        # 1. Limpa o número: remove todos os separadores para obter o valor inteiro
-        if ',' in num_str:
-            num_str_clean = num_str.replace('.', '').replace(',', '.')
+        if isinstance(number, (int, float)):
+            s = f"{int(number):,}"
+            return s.replace(",", "X").replace(".", ",").replace("X", ".")
         else:
-            num_str_clean = num_str.replace('.', '')
-            
-        # 2. Converte para o número inteiro completo (e.g., 291900)
-        num_int = int(float(num_str_clean))
-        
-        # 3. Formata o número inteiro com separador de milhar (,) (padrão Python/internacional)
-        s = f"{num_int:,}"
-        
-        # 4. Converte para o padrão brasileiro (ponto como separador de milhar)
-        return s.replace(",", "X").replace(".", ",").replace("X", ".")
+            num_str = str(number).replace('.', '').replace(',', '')
+            num_float = float(num_str)
+            s = f"{int(num_float):,}"
+            return s.replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
         return str(number)
         
@@ -295,13 +287,10 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             if "Weekly" in section_title: streak = row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A'))
 
             streams = "N/A"
-            display_streams = "N/A"
             if platform == 'Spotify' and 'Streams' in row:
                 streams = row.get('Streams', 'N/A')
-                display_streams = format_br_number(streams)
             elif platform == 'Youtube' and 'Visualizações Semanais' in row:
                 streams = row.get('Visualizações Semanais', 'N/A')
-                display_streams = format_br_number(streams)
 
             peak_date = row.get('Data de Pico') or row.get('Data do Pico', 'N/A')
             if peak_date != 'N/A': peak_date = format_br_date(peak_date)
@@ -329,7 +318,8 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             col_index = 5
             if has_streams or has_views_youtube:
                 with cols[col_index]:
-                    st.markdown(f"<span style='font-size: 16px;'>{display_streams}</span>", unsafe_allow_html=True)
+                    display_value = streams if streams == 'N/A' else format_br_number(streams)
+                    st.markdown(f"<span style='font-size: 16px;'>{display_value}</span>", unsafe_allow_html=True)
                 col_index += 1
             if has_peak_date:
                 with cols[col_index]: st.markdown(f"<span style='font-size: 16px;'>{peak_date}</span>", unsafe_allow_html=True)
@@ -493,9 +483,7 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
         return
 
     # --- Visualização da Tabela ---
-
-    st.write("---")
-
+    
     # --- Início do Gráfico de Análise ---
     
     df_unique_items = sorted(df[item_col].unique())
