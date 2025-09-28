@@ -117,18 +117,18 @@ def get_track_album_image(track_name, artist_name):
     return None
 
 def format_br_number(number):
-    # --- CORREÇÃO APLICADA AQUI: FOCO NA FORMATAÇÃO CORRETA DE MILHAR ---
+    # --- CORREÇÃO FINAL APLICADA AQUI: LIMPEZA TOTAL PARA INTEIRO E REFORMATAÇÃO BR ---
     try:
-        # Tenta limpar e converter o número (se for string, remove formatação)
-        num_str = str(number).replace('.', '').replace(',', '')
+        # 1. Converte o número para string e remove **todos** os separadores de milhar/decimal
+        num_str_clean = str(number).replace('.', '').replace(',', '')
         
-        # Converte para float e depois para INT para garantir que streams/visualizações são inteiros
-        num_int = int(float(num_str))
+        # 2. Converte para INT. Isso garante que o número completo seja preservado.
+        num_int = int(num_str_clean)
         
-        # Formata o número inteiro com separador de milhar (ponto)
+        # 3. Formata o número inteiro com separador de milhar (,)
         s = f"{num_int:,}"
         
-        # Converte para o padrão brasileiro (ponto como separador de milhar)
+        # 4. Converte para o padrão brasileiro (ponto como separador de milhar)
         return s.replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
         return str(number)
@@ -587,7 +587,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-#st.title('🎶 Vybbe Dashboard Streaming')
+st.title('🎶 Vybbe Dashboard Streaming')
 st.markdown("Bem-vindo(a) ao seu portal de inteligência de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 st.write("---")
 
