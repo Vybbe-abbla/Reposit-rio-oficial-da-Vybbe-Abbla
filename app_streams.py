@@ -117,18 +117,18 @@ def get_track_album_image(track_name, artist_name):
     return None
 
 def format_br_number(number):
-    # --- CORREÇÃO APLICADA AQUI PARA GARANTIR O NÚMERO COMPLETO ---
+    # --- CORREÇÃO APLICADA AQUI: FOCO NA FORMATAÇÃO CORRETA DE MILHAR ---
     try:
-        # 1. Converte o número para string e remove formatação existente para parsear limpo
+        # Tenta limpar e converter o número (se for string, remove formatação)
         num_str = str(number).replace('.', '').replace(',', '')
         
-        # 2. Converte para float e depois para INT para remover decimais (streams são sempre inteiros)
+        # Converte para float e depois para INT para garantir que streams/visualizações são inteiros
         num_int = int(float(num_str))
         
-        # 3. Formata o número inteiro com separador de milhar (,)
+        # Formata o número inteiro com separador de milhar (ponto)
         s = f"{num_int:,}"
         
-        # 4. Converte para o padrão brasileiro (ponto como separador de milhar)
+        # Converte para o padrão brasileiro (ponto como separador de milhar)
         return s.replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
         return str(number)
@@ -290,7 +290,7 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             if "Weekly" in section_title: streak = row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A'))
 
             streams = "N/A"
-            display_streams = "N/A" # Variável para o valor formatado
+            display_streams = "N/A"
             if platform == 'Spotify' and 'Streams' in row:
                 streams = row.get('Streams', 'N/A')
                 display_streams = format_br_number(streams)
@@ -324,7 +324,6 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             col_index = 5
             if has_streams or has_views_youtube:
                 with cols[col_index]:
-                    # Usando o valor formatado 'display_streams'
                     st.markdown(f"<span style='font-size: 16px;'>{display_streams}</span>", unsafe_allow_html=True)
                 col_index += 1
             if has_peak_date:
