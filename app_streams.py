@@ -587,7 +587,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title('🎶 Vybbe Dashboard Streaming')
+#st.title('🎶 Vybbe Dashboard Streaming')
 st.markdown("Bem-vindo(a) ao seu portal de inteligência de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 st.write("---")
 
