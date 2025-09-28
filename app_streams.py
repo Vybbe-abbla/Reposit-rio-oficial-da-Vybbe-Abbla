@@ -71,7 +71,6 @@ def load_data(sheet_index):
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 try:
-    # AQUI ESTAVA O ERRO DE DIGITAÇÃO: SpotifyClientClientCredentials -> SpotifyClientCredentials
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET))
 except Exception as e:
     st.error(f"Erro ao autenticar com a API do Spotify: {e}")
@@ -286,11 +285,16 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             streak = row.get('days_on_chart', 'N/A')
             if "Weekly" in section_title: streak = row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A'))
 
+            # --- CORREÇÃO DE STREAMS/VISUALIZAÇÕES APLICADA AQUI ---
             streams = "N/A"
+            display_streams = "N/A"
             if platform == 'Spotify' and 'Streams' in row:
                 streams = row.get('Streams', 'N/A')
+                display_streams = format_br_number(streams)
             elif platform == 'Youtube' and 'Visualizações Semanais' in row:
                 streams = row.get('Visualizações Semanais', 'N/A')
+                display_streams = format_br_number(streams)
+            # FIM DA CORREÇÃO
 
             peak_date = row.get('Data de Pico') or row.get('Data do Pico', 'N/A')
             if peak_date != 'N/A': peak_date = format_br_date(peak_date)
@@ -318,8 +322,8 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             col_index = 5
             if has_streams or has_views_youtube:
                 with cols[col_index]:
-                    display_value = streams if streams == 'N/A' else format_br_number(streams)
-                    st.markdown(f"<span style='font-size: 16px;'>{display_value}</span>", unsafe_allow_html=True)
+                    # Usa o valor formatado 'display_streams'
+                    st.markdown(f"<span style='font-size: 16px;'>{display_streams}</span>", unsafe_allow_html=True)
                 col_index += 1
             if has_peak_date:
                 with cols[col_index]: st.markdown(f"<span style='font-size: 16px;'>{peak_date}</span>", unsafe_allow_html=True)
@@ -483,7 +487,9 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
         return
 
     # --- Visualização da Tabela ---
-    
+
+    st.write("---")
+
     # --- Início do Gráfico de Análise ---
     
     df_unique_items = sorted(df[item_col].unique())
@@ -580,7 +586,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title('🎶 Vybbe Dashboard Streaming')
+#st.title('🎶 Vybbe Dashboard Streaming')
 st.markdown("Bem-vindo(a) ao seu portal de inteligência de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 st.write("---")
 
