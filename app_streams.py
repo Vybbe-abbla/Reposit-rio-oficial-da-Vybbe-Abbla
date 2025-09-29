@@ -82,7 +82,10 @@ def get_artist_image(artist_name):
     if sp is None:
         return None
     try:
-        results = sp.search(q='artist:' + artist_name, type='artist', limit=1)
+        # Pega apenas o primeiro artista se houver vírgula
+        primary_artist_name = artist_name.split(',')[0].strip() if isinstance(artist_name, str) else artist_name
+        
+        results = sp.search(q='artist:' + primary_artist_name, type='artist', limit=1)
         if results['artists']['items'] and results['artists']['items'][0]['images']:
             return results['artists']['items'][0]['images'][0]['url']
     except Exception as e:
@@ -107,27 +110,53 @@ def get_album_image(album_name):
 def get_track_album_image(track_name, artist_name):
     if sp is None:
         return None
+        
+    image_url = None
+    
+    # 1. Tenta buscar a imagem do álbum da faixa
     try:
-        results = sp.search(q=f'track:{track_name} artist:{artist_name}', type='track', limit=1)
+        primary_artist_name = artist_name.split(',')[0].strip() if isinstance(artist_name, str) else artist_name
+        
+        results = sp.search(q=f'track:{track_name} artist:{primary_artist_name}', type='track', limit=1)
         if results and 'tracks' in results and results['tracks']['items']:
             track_item = results['tracks']['items'][0]
             if 'album' in track_item and 'images' in track_item['album'] and track_item['album']['images']:
-                return track_item['album']['images'][0]['url']
+                image_url = track_item['album']['images'][0]['url']
+                
     except Exception as e:
-        st.error(f"Erro ao buscar imagem do álbum para a música {track_name} de {artist_name}: {e}")
-    return None
+        # Erro de busca no Spotify (ex: música não existe ou problema de API)
+        pass # Continua para o fallback
+        
+    # 2. Se a imagem do álbum falhou ou não foi encontrada, usa a imagem do artista (FALLBACK)
+    if not image_url:
+        image_url = get_artist_image(artist_name)
+        
+    return image_url
 
+# CORREÇÃO: Formatação robusta para Padrão BR (Ponto Milhar)
 def format_br_number(number):
+    """Preserva os dígitos, limpa e formata o número para o padrão BR (ponto milhar)."""
     try:
-        if isinstance(number, (int, float)):
-            s = f"{int(number):,}"
-            return s.replace(",", "X").replace(".", ",").replace("X", ".")
-        else:
-            num_str = str(number).replace('.', '').replace(',', '')
-            num_float = float(num_str)
-            s = f"{int(num_float):,}"
-            return s.replace(",", "X").replace(".", ",").replace("X", ".")
+        # 1. Limpeza
+        number_str = str(number).strip()
+        
+        # Remove separadores de milhar (ponto e vírgula) para obter o valor numérico puro.
+        number_pure = number_str.replace('.', '').replace(',', '')
+        
+        # 2. Conversão segura para inteiro (preserva dígitos)
+        num_int = int(float(number_pure))
+        
+        # 3. Formatação
+        # Formata o número com separadores de milhar do sistema (vírgula)
+        s = f"{num_int:,}"
+        
+        # 4. Ajuste BR: troca separadores
+        s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        return s
+        
     except (ValueError, TypeError):
+        # Retorna o valor original como string se a conversão falhar
         return str(number)
         
 def format_br_date(date_str):
@@ -218,6 +247,7 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
                 st.info(f"Nenhum dado encontrado para a data selecionada: {selected_date_display.strftime('%d/%m/%Y')}.")
             
     if not df_display.empty:
+        
         total_artistas = df_display['Artista'].nunique()
         if item_type == 'o artista':
             col_artists = st.columns(1)
@@ -255,13 +285,19 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
         
         header_cols = st.columns(column_ratios)
         
+        # Determina o cabeçalho correto para a coluna de tempo (Dias ou Semanas)
+        time_header = "Dias no Charts"
+        if "Weekly" in section_title or "Semanal" in section_title:
+            time_header = "Semanas no Charts"
+            
+        # CORREÇÃO APLICADA: Renomeação dos cabeçalhos das colunas
         with header_cols[0]: st.markdown("<b>#</b>", unsafe_allow_html=True)
         with header_cols[1]: 
-            header_text = "ARTIST" if "Top Artists" in section_title or "Top Artistas" in section_title else ("ALBUM" if "Top Albums" in section_title else "TRACK")
+            header_text = "ARTISTA" if "Top Artists" in section_title or "Top Artistas" in section_title else ("ÁLBUM" if "Top Albums" in section_title else "MÚSICA/FAIXA")
             st.markdown(f"<b>{header_text}</b>", unsafe_allow_html=True)
-        with header_cols[2]: st.markdown("<b>Peak</b>", unsafe_allow_html=True)
-        with header_cols[3]: st.markdown("<b>Prev</b>", unsafe_allow_html=True)
-        with header_cols[4]: st.markdown("<b>Streak</b>", unsafe_allow_html=True)
+        with header_cols[2]: st.markdown("<b>Pico</b>", unsafe_allow_html=True)
+        with header_cols[3]: st.markdown("<b>Anterior</b>", unsafe_allow_html=True)
+        with header_cols[4]: st.markdown(f"<b>{time_header}</b>", unsafe_allow_html=True) # Cabeçalho dinâmico
 
         col_index = 5
         if has_streams:
@@ -271,9 +307,12 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             with header_cols[col_index]: st.markdown("<b>Visualizações</b>", unsafe_allow_html=True)
             col_index += 1
         if has_peak_date:
-            with header_cols[col_index]: st.markdown("<b>Peak Date</b>", unsafe_allow_html=True)
+            with header_cols[col_index]: st.markdown("<b>Data de Pico</b>", unsafe_allow_html=True)
 
         st.markdown("---")
+
+        # Define a largura padrão para a imagem (PADRONIZADO PARA 200 PIXELS)
+        image_width = 200 
 
         for index, row in df_display.iterrows():
             rank = row.get('Rank', 'N/A')
@@ -283,8 +322,12 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             peak_rank = row.get('peak_rank', 'N/A')
             previous_rank = row.get('previous_rank', 'N/A')
             
+            # CORREÇÃO APLICADA: Busca por 'Weeks_on_chart' para charts semanais (Semanal ou Weekly)
             streak = row.get('days_on_chart', 'N/A')
-            if "Weekly" in section_title: streak = row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A'))
+            if "Weekly" in section_title or "Semanal" in section_title: 
+                # Tenta 'Weeks_on_chart' (YouTube) ou 'weeks_on_chart' (Spotify)
+                streak = row.get('Weeks_on_chart', row.get('weeks_on_chart', 'N/A'))
+
 
             streams = "N/A"
             if platform == 'Spotify' and 'Streams' in row:
@@ -296,16 +339,19 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             if peak_date != 'N/A': peak_date = format_br_date(peak_date)
 
             image_url = None
-            if item_type == 'o artista': image_url = get_artist_image(artist_name.split(',')[0].strip())
+            
+            # Lógica de fallback para imagens
+            if item_type == 'o artista': image_url = get_artist_image(artist_name)
             elif item_type == 'o álbum': image_url = get_album_image(item_name)
-            elif item_type in ['a música', 'a faixa']: image_url = get_track_album_image(item_name, artist_name)
+            elif item_type in ['a música', 'a faixa']: 
+                image_url = get_track_album_image(item_name, artist_name)
                 
             cols = st.columns(column_ratios)
             with cols[0]: st.markdown(f"<p style='font-size:20px; font-weight:bold;'>{rank}</p>", unsafe_allow_html=True)
             with cols[1]:
                 track_cols = st.columns([0.7, 3])
                 with track_cols[0]:
-                    if image_url: st.image(image_url, width=200, caption="")
+                    if image_url: st.image(image_url, width=image_width, caption="")
                     else: st.write("🖼️")
                 with track_cols[1]:
                     st.markdown(f"**{item_name}**")
@@ -398,7 +444,9 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             elif chart_type_radio == "Visualizações": y_axis_col = "Visualizações Semanais"; y_axis_title = "Número de Visualizações"
 
     if y_axis_col in ["Streams", "Visualizações Semanais"] and y_axis_col in df_chart.columns:
+        # Para o gráfico, a conversão numérica PRECISA ser feita.
         df_chart[y_axis_col] = df_chart[y_axis_col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).astype(float)
+        # O valor formatado para o hover do gráfico usa a função corrigida
         df_chart['y_axis_formatted'] = df_chart[y_axis_col].apply(lambda x: format_br_number(x))
         y_tickformat = None
     
@@ -580,7 +628,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title('🎶 Vybbe Dashboard Streaming')
+#st.title('🎶 Vybbe Dashboard Streaming')
 st.markdown("Bem-vindo(a) ao seu portal de inteligência de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 st.write("---")
 
@@ -674,17 +722,10 @@ elif plataforma_selecionada == "Apple Music":
     display_chart(sheet_index=14, section_title="Daily Top Songs Apple Music", item_type="a música", key_suffix="songs_apple", chart_type='daily', platform='Apple Music')
 
 st.write("---")
-st.markdown("Desenvolvido com Python e Streamlit, este painel é uma ferramenta essencial para a análise de mercado musical. Os dados aqui apresentados refletem as tendências mais recentes, permitindo uma tomada de decisão estratégica e ágil para artistas e profissionais da indústria.")
+st.markdown("Desenvolvido com Python e Streamlit, este painel é uma ferramenta essencial para a análise de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 
 st.markdown("---")
 col1, col2 = st.columns([1, 4])
-
-with col1:
-    try:
-        rodape_image = Image.open("habbla_rodape.jpg")
-        st.image(rodape_image, width=110)
-    except FileNotFoundError:
-        st.write("Rodapé Vybbe Charts")
 
 with col2:
     st.markdown(
@@ -694,7 +735,5 @@ with col2:
         Versão 1.0.0 | Atualizado em: Setembro/2025<br>
         <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
         <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
-        </div>
-        """,
-        unsafe_allow_html=True
+        </div>""",
     )
