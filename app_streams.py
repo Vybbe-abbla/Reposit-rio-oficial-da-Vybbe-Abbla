@@ -727,13 +727,18 @@ st.markdown("Desenvolvido com Python e Streamlit, este painel é uma ferramenta 
 st.markdown("---")
 col1, col2 = st.columns([1, 4])
 
+with col1:
+    st.image("habbla_rodape.jpg", width=110)
+
 with col2:
     st.markdown(
         """
         <div style='font-size: 12px; color: gray;'>
-        Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2025 Habbla Marketing<br>
-        Versão 1.0.0 | Atualizado em: Setembro/2025<br>
-        <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
-        <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
-        </div>""",
+            Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2025 Habbla Marketing<br>
+            Versão 1.0.0 | Atualizado em: Setembro/2025<br>
+            <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
+            <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
