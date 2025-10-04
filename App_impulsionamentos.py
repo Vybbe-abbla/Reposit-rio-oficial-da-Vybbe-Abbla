@@ -8,7 +8,7 @@ import re
 st.set_page_config(page_title="Impulsionamento Instagram", layout="centered")
 
 # pasta onde serão salvos os arquivos (ajuste se quiser)
-base_dir = r"H:\Meu Drive\8.Impusionamento\1.BD_Imposicionamentos"
+base_dir = r"H:\Meu Drive\9.Power_Bi\2.Impulsionamentos\1.BD_Impsulsionamentos"
 os.makedirs(base_dir, exist_ok=True)
 
 # helpers
