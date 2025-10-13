@@ -141,16 +141,21 @@ def format_br_number(number):
         number_str = str(number).strip()
         
         # Remove separadores de milhar (ponto e vírgula) para obter o valor numérico puro.
+        # CORREÇÃO ADICIONADA: O GSheets pode retornar números como strings "2,319,970" ou "2.319.970"
+        # Precisamos de um valor numérico puro para formatar: 2319970
         number_pure = number_str.replace('.', '').replace(',', '')
         
-        # 2. Conversão segura para inteiro (preserva dígitos)
-        num_int = int(float(number_pure))
+        # Se for um float (e.g. 2319970.0), converte para int para evitar casa decimal
+        if '.' in number_str: # Se a string original ou limpa ainda tiver ponto (sinal de decimal no BR ou separador no US)
+             num_int = int(float(number_pure))
+        else:
+             num_int = int(number_pure)
         
         # 3. Formatação
-        # Formata o número com separadores de milhar do sistema (vírgula)
+        # Formata o número com separadores de milhar do sistema (vírgula no US)
         s = f"{num_int:,}"
         
-        # 4. Ajuste BR: troca separadores
+        # 4. Ajuste BR: troca separadores (vírgula por ponto, ponto por vírgula)
         s = s.replace(",", "X").replace(".", ",").replace("X", ".")
         
         return s
@@ -444,10 +449,21 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
             elif chart_type_radio == "Visualizações": y_axis_col = "Visualizações Semanais"; y_axis_title = "Número de Visualizações"
 
     if y_axis_col in ["Streams", "Visualizações Semanais"] and y_axis_col in df_chart.columns:
-        # Para o gráfico, a conversão numérica PRECISA ser feita.
-        df_chart[y_axis_col] = df_chart[y_axis_col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).astype(float)
-        # O valor formatado para o hover do gráfico usa a função corrigida
+        
+        # --- CORREÇÃO DE BUG: Conversão e Formatação para o Gráfico ---
+        # 1. Converte a coluna para string e limpa os separadores de milhar (ponto e vírgula) do GSheets/BR
+        df_chart['temp_numeric'] = df_chart[y_axis_col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False)
+        
+        # 2. Converte para float para ser o eixo Y do Plotly
+        df_chart[y_axis_col] = pd.to_numeric(df_chart['temp_numeric'], errors='coerce')
+        
+        # 3. Usa a função corrigida `format_br_number` para criar a coluna de texto formatado (para o hover/text)
         df_chart['y_axis_formatted'] = df_chart[y_axis_col].apply(lambda x: format_br_number(x))
+
+        # Remove a coluna temporária
+        df_chart = df_chart.drop(columns=['temp_numeric'])
+        # --- FIM DA CORREÇÃO DE BUG ---
+
         y_tickformat = None
     
     text_col = 'y_axis_formatted' if 'y_axis_formatted' in df_chart.columns else y_axis_col
@@ -479,7 +495,13 @@ def display_chart(sheet_index, section_title, item_type, key_suffix, chart_type,
     else: st.header(f"{y_axis_title} de '{selected_item}' ao Longo do Tempo")
         
     fig = px.line(df_chart, x=date_col_name, y=y_axis_col, text=text_col, line_shape='spline')
-    fig.update_traces(textposition='top center')
+    
+    # Se for Streams ou Visualizações, remove os pontos para que o número não seja exibido com casas decimais no hover.
+    if y_axis_col in ["Streams", "Visualizações Semanais"]:
+         fig.update_traces(texttemplate='%{text}', textposition='top center')
+    else:
+         fig.update_traces(textposition='top center')
+         
     
     yaxis_config = {'title': y_axis_title}
     if y_axis_col == 'Rank': yaxis_config['autorange'] = 'reversed'
