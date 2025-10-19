@@ -850,7 +850,6 @@ whatsapp_message_content = generate_whatsapp_message()
 today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
 today_formatted = today_br.strftime('%Y%m%d')
 
-st.markdown("### Download Charts para WhatsApp")
 st.download_button(
     label="📲 Baixar Charts (WhatsApp .txt)",
     data=whatsapp_message_content,
