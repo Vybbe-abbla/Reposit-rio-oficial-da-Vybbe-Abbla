@@ -730,7 +730,7 @@ def generate_whatsapp_message():
         message_parts.append(f"---------------------------------------")
 
     message_parts.append(f"\nAcesse o dashboard completo para mais detalhes:")
-    message_parts.append(f"🔗 [Link do Dashboard: https://vybbe-charts.streamlit.app/]")
+    message_parts.append(f"🔗 Link do Dashboard: [https://vybbe-charts.streamlit.app/]")
 
     return "\n".join(message_parts)
 # ----- Fim 
