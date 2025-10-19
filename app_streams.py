@@ -634,7 +634,106 @@ def display_weekly_global_chart(global_sheet_index, global_section_title, global
     fig.update_layout(xaxis_title="Dia", yaxis=yaxis_config)
     st.plotly_chart(fig)
     st.write("---")
+@st.cache_data
+def generate_whatsapp_message():
+    """Busca dados dos Daily Charts de múltiplas plataformas e formata uma mensagem detalhada para WhatsApp."""
+    
+    # Mapeamento: (sheet_index, chart_name_prefix, item_col, platform_name, is_youtube)
+    daily_charts_config = [
+        (5, "Spotify - Diário Top Músicas Brasil", 'Música', 'Spotify', False),
+        (4, "Spotify - Diário Top Músicas Global", 'Música', 'Spotify', False),
+        (18, "YouTube - Top Vídeos Diários Brasil", 'Música', 'YouTube', True),
+        (12, "DEEZER - Diário Top Músicas", 'Música', 'DEEZER', False),
+        (13, "Amazon - Diário Top Músicas Amazon", 'Música', 'Amazon', False),
+        (14, "Apple Music - Diário Top Músicas Apple Music", 'Música', 'Apple Music', False),
+    ]
 
+    message_parts = []
+    
+    today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
+    # yesterday é usada apenas para fins de exibição da data, o filtro usa a data real do dado
+    yesterday = today_br - timedelta(days=1) 
+    
+    for sheet_index, chart_name_prefix, item_col, platform_name, is_youtube in daily_charts_config:
+        df = load_data(sheet_index)
+
+        if df.empty:
+            continue
+            
+        date_col_name = 'DATA' if 'DATA' in df.columns else 'Data'
+        df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y", errors='coerce')
+        df = df.dropna(subset=[date_col_name])
+        
+        if df.empty:
+            continue
+        
+        latest_date_available = df[date_col_name].max().date()
+        date_to_filter = latest_date_available 
+        
+        df_display = df[df[date_col_name].dt.date == date_to_filter].copy()
+
+        if df_display.empty:
+            continue
+            
+        # Garante ordenação numérica e usa o total de itens presentes
+        df_display['Rank_num'] = pd.to_numeric(df_display['Rank'], errors='coerce')
+        df_display = df_display.sort_values(by='Rank_num', ascending=True).dropna(subset=['Rank_num'])
+        
+        total_items = len(df_display)
+        
+        # --- CABEÇALHO ---
+        # Tópicos principais em negrito (usando *)
+        chart_title = chart_name_prefix.split(' - ')[-1]
+        message_parts.append(f"🎶 *{platform_name}* - *{chart_title}*")
+        message_parts.append(f"📅 *Dados de:* {date_to_filter.strftime('%d/%m/%Y')}")
+
+        corte_charts_value = df_display['Corte charts'].iloc[0] if 'Corte charts' in df_display.columns and not df_display.empty else None
+        if corte_charts_value:
+            message_parts.append(f"✂ *Corte:* {format_br_number(corte_charts_value)}")
+            
+        message_parts.append(f"---------------------------------------")
+        message_parts.append(f"*Chart Completo* ({total_items} item{'s' if total_items != 1 else ''}) -")
+        
+        # --- DETALHES DAS MÚSICAS ---
+        for _, row in df_display.iterrows():
+            rank = row.get('Rank', 'N/A')
+            item_name = row.get(item_col, '').strip()
+            artist_col = 'Artista' if 'Artista' in row else 'Criador'
+            artist_name = row.get(artist_col, 'N/A').strip()
+            
+            # Métricas
+            streams = row.get('Streams', None)
+            views = row.get('Visualizações Semanais', None)
+            previous_rank = row.get('previous_rank', 'N/A')
+            peak_rank = row.get('peak_rank', 'N/A')
+            
+            # Verifica se é chart Weekly (para dias ou semanas)
+            days_on_chart = row.get('days_on_chart', row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A')))
+            days_label = "Dias" if sheet_index in [4, 5, 12, 13, 14, 18, 19] else "Semanas"
+            
+            # Linha Principal (Negrito no Rank e Título da Música)
+            stream_info = ""
+            if streams:
+                formatted_streams = format_br_number(streams)
+                stream_info = f" ({formatted_streams} Streams)"
+            elif views:
+                formatted_views = format_br_number(views)
+                stream_info = f" ({formatted_views} Visualizações)"
+                
+            # Formato: 7. Pela Última Vez - Ao Vivo - Grupo Menos É Mais, NATTAN (1.135.516 Streams)
+            message_parts.append(f"*{rank}. {item_name}* - {artist_name}{stream_info}")
+            
+            # Linha Secundária (Detalhamento)
+            # Formato: Ant.: 7 | Pico: 2 | Dias: 58
+            message_parts.append(f"   Ant.: {previous_rank} | Pico: {peak_rank} | {days_label}: {days_on_chart}")
+            
+        message_parts.append(f"---------------------------------------")
+
+    message_parts.append(f"\nAcesse o dashboard completo para mais detalhes:")
+    message_parts.append(f"🔗 [Link do Dashboard: https://vybbe-charts.streamlit.app/]")
+
+    return "\n".join(message_parts)
+# ----- Fim 
 
 # --- Estrutura principal do aplicativo (Não alterada) ---
 try:
@@ -745,6 +844,20 @@ elif plataforma_selecionada == "Apple Music":
 
 st.write("---")
 st.markdown("Desenvolvido com Python e Streamlit, este painel é uma ferramenta essencial para a análise de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
+
+# --- NOVO BLOCO: Botão de Download da Mensagem (Próximo ao rodapé) ---
+whatsapp_message_content = generate_whatsapp_message()
+today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
+today_formatted = today_br.strftime('%Y%m%d')
+
+st.markdown("### Download Charts para WhatsApp")
+st.download_button(
+    label="📲 Baixar Charts (WhatsApp .txt)",
+    data=whatsapp_message_content,
+    file_name=f"Daily_Charts_Vybbe_{today_formatted}.txt",
+    mime="text/plain",
+    help="Clique para baixar os rankings diários consolidados em um arquivo de texto para facilitar o compartilhamento no WhatsApp."
+)
 
 st.markdown("---")
 col1, col2 = st.columns([1, 4])
