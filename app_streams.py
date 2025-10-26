@@ -730,7 +730,111 @@ def generate_whatsapp_message():
         message_parts.append(f"---------------------------------------")
 
     message_parts.append(f"\n*Acesse o dashboard completo para mais detalhes:*")
-    message_parts.append(f"https://vybbe-charts.streamlit.app/")
+    message_parts.append(f"https://vybbestreams.streamlit.app/")
+
+    return "\n".join(message_parts)
+
+# --- FUNÇÃO PARA GERAR MENSAGEM SEMANAL (COMPLETA) ---
+@st.cache_data
+def generate_weekly_whatsapp_message():
+    """Busca dados dos Weekly Charts do Spotify e Youtube e formata uma mensagem detalhada para WhatsApp."""
+    
+    # Mapeamento: (sheet_index, chart_name_prefix, item_col, platform_name, is_youtube)
+    weekly_charts_config = [
+        # Spotify Weekly
+        (6, "Spotify - Semanal Top Músicas Global", 'Música', 'Spotify', False),
+        (7, "Spotify - Semanal Top Músicas Brasil", 'Música', 'Spotify', False),
+        (2, "Spotify - Semanal Top Artistas Global", 'Artista', 'Spotify', False),
+        (3, "Spotify - Semanal Top Artistas Brasil", 'Artista', 'Spotify', False),
+        (10, "Spotify - Semanal Top Álbuns Global", 'Álbum', 'Spotify', False),
+        (11, "Spotify - Semanal Top Álbuns Brasil", 'Álbum', 'Spotify', False),
+        # Youtube Weekly
+        (16, "YouTube - Top Faixas Semanal Brasil", 'Faixa', 'YouTube', True),
+        (15, "YouTube - Top Artistas Semanal Brasil", 'Artista', 'YouTube', True),
+    ]
+
+    message_parts = []
+    
+    today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
+    
+    for sheet_index, chart_name_prefix, item_col, platform_name, is_youtube in weekly_charts_config:
+        df = load_data(sheet_index)
+
+        if df.empty:
+            continue
+            
+        date_col_name = 'DATA' if 'DATA' in df.columns else 'Data'
+        df[date_col_name] = pd.to_datetime(df[date_col_name], format="%d/%m/%Y", errors='coerce')
+        df = df.dropna(subset=[date_col_name])
+        
+        if df.empty:
+            continue
+        
+        latest_date_available = df[date_col_name].max().date()
+        date_to_filter = latest_date_available 
+        
+        df_display = df[df[date_col_name].dt.date == date_to_filter].copy()
+
+        if df_display.empty:
+            continue
+            
+        # Garante ordenação numérica e usa o total de itens presentes
+        df_display['Rank_num'] = pd.to_numeric(df_display['Rank'], errors='coerce')
+        df_display = df_display.sort_values(by='Rank_num', ascending=True).dropna(subset=['Rank_num'])
+        
+        total_items = len(df_display)
+        
+        # --- CABEÇALHO ---
+        chart_title = chart_name_prefix.split(' - ')[-1]
+        message_parts.append(f"\n🎶 *{platform_name}* - *{chart_title}*")
+        message_parts.append(f"📅 *Dados de:* {date_to_filter.strftime('%d/%m/%Y')}")
+
+        message_parts.append(f"---------------------------------------")
+        message_parts.append(f"*Chart Completo* ({total_items} item{'s' if total_items != 1 else ''}) -")
+        
+        # --- DETALHES DOS ITENS ---
+        for _, row in df_display.iterrows():
+            rank = row.get('Rank', 'N/A')
+            item_name = row.get(item_col, '').strip()
+            
+            # Artista só é incluído se o item_col não for Artista/Criador
+            artist_name = ""
+            artist_col = 'Artista' if 'Artista' in row else 'Criador'
+            if item_col not in ['Artista', 'Criador', 'Álbum']:
+                 artist_name = row.get(artist_col, 'N/A').strip()
+            
+            # Métricas
+            streams = row.get('Streams', None)
+            views = row.get('Visualizações Semanais', None)
+            previous_rank = row.get('previous_rank', row.get('Previous_Rank', 'N/A'))
+            peak_rank = row.get('peak_rank', row.get('Peak_Rank', 'N/A'))
+            
+            # Para charts Semanais, forçamos a busca por semanas (usando Weeks_on_chart ou weeks_on_chart)
+            weeks_on_chart = row.get('Weeks_on_chart', row.get('weeks_on_chart', 'N/A'))
+            
+            # Linha Principal (Negrito no Rank e Título do Item)
+            stream_info = ""
+            if streams and item_col not in ['Artista', 'Álbum']: # Só exibe streams para Músicas/Faixas
+                formatted_streams = format_br_number(streams)
+                stream_info = f" ({formatted_streams} Streams)"
+            elif views and item_col not in ['Artista', 'Álbum']:
+                formatted_views = format_br_number(views)
+                stream_info = f" ({formatted_views} Visualizações)"
+                
+            
+            # Linha: RANK. MÚSICA/ÁLBUM/ARTISTA - ARTISTA (Streams/Views)
+            artist_display = f" - {artist_name}" if artist_name else ""
+            message_parts.append(f"*{rank}. {item_name}*{artist_display}{stream_info}")
+            
+            # Linha Secundária (Detalhamento)
+            message_parts.append(f"   Ant.: {previous_rank} | Pico: {peak_rank} | Semanas: {weeks_on_chart}")
+            
+        message_parts.append(f"---------------------------------------")
+
+    # --- RODAPÉ DA MENSAGEM (CORRIGIDO PARA LINK) ---
+    # Removido o '*' para garantir que a URL seja detectada pelo WhatsApp
+    message_parts.append(f"\nAcesse o dashboard completo para mais detalhes:")
+    message_parts.append(f"https://vybbestreams.streamlit.app/")
 
     return "\n".join(message_parts)
 # ----- Fim 
@@ -846,23 +950,42 @@ st.write("---")
 st.markdown("Desenvolvido com Python e Streamlit, este painel é uma ferramenta essencial para a análise de mercado musical. Explore as tendências e rankings das principais plataformas de streaming, com dados atualizados e análises detalhadas para auxiliar na sua estratégia artística.")
 
 # --- NOVO BLOCO: Botão de Download da Mensagem (Próximo ao rodapé) ---
-whatsapp_message_content = generate_whatsapp_message()
+# st.radio para seleção de tipo de chart
+chart_type_download = st.radio(
+    "Selecione o tipo de dado para download:", 
+    ("Diário", "Semanal"),
+    key="download_chart_type"
+)
+
 today_br = datetime.now(TZ).date() if TZ else datetime.today().date()
 today_formatted = today_br.strftime('%Y%m%d')
 
-st.download_button(
-    label="📲 Baixar Charts (WhatsApp .txt)",
-    data=whatsapp_message_content,
-    file_name=f"Daily_Charts_Vybbe_{today_formatted}.txt",
-    mime="text/plain",
-    help="Clique para baixar os rankings diários consolidados em um arquivo de texto para facilitar o compartilhamento no WhatsApp."
-)
+if chart_type_download == "Diário":
+    download_content = generate_whatsapp_message()
+    file_name = f"Daily_Charts_Vybbe_{today_formatted}.txt"
+    label = "📲 Baixar Charts Diários (WhatsApp .txt)"
+else:
+    download_content = generate_weekly_whatsapp_message()
+    file_name = f"Weekly_Charts_Vybbe_{today_formatted}.txt"
+    label = "📲 Baixar Charts Semanais (WhatsApp .txt)"
 
-st.markdown("---")
+st.download_button(
+    label=label,
+    data=download_content,
+    file_name=file_name,
+    mime="text/plain",
+    help="Clique para baixar os rankings consolidados em um arquivo de texto para facilitar o compartilhamento no WhatsApp."
+)
+st.write("---")
+# Rodapé existente
 col1, col2 = st.columns([1, 4])
 
 with col1:
-    st.image("habbla_rodape.jpg", width=110)
+    try:
+        rodape_image = Image.open('habbla_rodape.jpg')
+        st.image(rodape_image, width=110)
+    except FileNotFoundError:
+        st.write("Logo rodapé não encontrada.")
 
 with col2:
     st.markdown(
