@@ -735,6 +735,7 @@ def generate_whatsapp_message():
     return "\n".join(message_parts)
 
 # --- FUNÇÃO PARA GERAR MENSAGEM SEMANAL (COMPLETA) ---
+# --- FUNÇÃO CORRIGIDA: generate_weekly_whatsapp_message (Weekly Charts) ---
 @st.cache_data
 def generate_weekly_whatsapp_message():
     """Busca dados dos Weekly Charts do Spotify e Youtube e formata uma mensagem detalhada para WhatsApp."""
@@ -795,6 +796,8 @@ def generate_weekly_whatsapp_message():
         # --- DETALHES DOS ITENS ---
         for _, row in df_display.iterrows():
             rank = row.get('Rank', 'N/A')
+            
+            # **CORREÇÃO:** Garante que a coluna de nome do item seja usada
             item_name = row.get(item_col, '').strip()
             
             # Artista só é incluído se o item_col não for Artista/Criador
@@ -822,9 +825,14 @@ def generate_weekly_whatsapp_message():
                 stream_info = f" ({formatted_views} Visualizações)"
                 
             
-            # Linha: RANK. MÚSICA/ÁLBUM/ARTISTA - ARTISTA (Streams/Views)
+            # Linha: *RANK. NOME_DO_ITEM* - ARTISTA (Streams/Views)
+            # Verifica se item_name está vazio, se estiver, usa o nome do artista para evitar o asterisco vazio.
+            display_item_name = item_name if item_name else "N/A"
+            
             artist_display = f" - {artist_name}" if artist_name else ""
-            message_parts.append(f"*{rank}. {item_name}*{artist_display}{stream_info}")
+            
+            # A linha principal agora garante que o item_name (nome da música) seja o primeiro elemento negrito
+            message_parts.append(f"*{rank}. {display_item_name}*{artist_display}{stream_info}")
             
             # Linha Secundária (Detalhamento)
             message_parts.append(f"   Ant.: {previous_rank} | Pico: {peak_rank} | Semanas: {weeks_on_chart}")
@@ -832,13 +840,11 @@ def generate_weekly_whatsapp_message():
         message_parts.append(f"---------------------------------------")
 
     # --- RODAPÉ DA MENSAGEM (CORRIGIDO PARA LINK) ---
-    # Removido o '*' para garantir que a URL seja detectada pelo WhatsApp
     message_parts.append(f"\nAcesse o dashboard completo para mais detalhes:")
-    message_parts.append(f"https://vybbestreams.streamlit.app/")
+    message_parts.append(f"https://vybbe-charts.streamlit.app/")
 
     return "\n".join(message_parts)
 # ----- Fim 
-
 # --- Estrutura principal do aplicativo (Não alterada) ---
 try:
     imagem_logo = Image.open('logo_Charts.jpg')
