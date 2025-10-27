@@ -735,7 +735,6 @@ def generate_whatsapp_message():
     return "\n".join(message_parts)
 
 # --- FUNÇÃO PARA GERAR MENSAGEM SEMANAL (COMPLETA) ---
-# --- FUNÇÃO CORRIGIDA: generate_weekly_whatsapp_message (Weekly Charts) ---
 @st.cache_data
 def generate_weekly_whatsapp_message():
     """Busca dados dos Weekly Charts do Spotify e Youtube e formata uma mensagem detalhada para WhatsApp."""
@@ -750,7 +749,8 @@ def generate_weekly_whatsapp_message():
         (10, "Spotify - Semanal Top Álbuns Global", 'Álbum', 'Spotify', False),
         (11, "Spotify - Semanal Top Álbuns Brasil", 'Álbum', 'Spotify', False),
         # Youtube Weekly
-        (16, "YouTube - Top Faixas Semanal Brasil", 'Faixa', 'YouTube', True),
+        # CORRIGIDO: Usando 'Música' conforme solicitado, em vez de 'Faixa'
+        (16, "YouTube - Top Faixas Semanal Brasil", 'Música', 'YouTube', True), 
         (15, "YouTube - Top Artistas Semanal Brasil", 'Artista', 'YouTube', True),
     ]
 
@@ -797,8 +797,13 @@ def generate_weekly_whatsapp_message():
         for _, row in df_display.iterrows():
             rank = row.get('Rank', 'N/A')
             
-            # **CORREÇÃO:** Garante que a coluna de nome do item seja usada
-            item_name = row.get(item_col, '').strip()
+            # Extração robusta do item_name: Tenta o item_col configurado, se não funcionar, tenta 'Música' ou 'Faixa'
+            item_name = str(row.get(item_col, '')).strip()
+            if not item_name and item_col != 'Música' and 'Música' in row:
+                 item_name = str(row.get('Música', '')).strip()
+            if not item_name and item_col != 'Faixa' and 'Faixa' in row:
+                 item_name = str(row.get('Faixa', '')).strip()
+
             
             # Artista só é incluído se o item_col não for Artista/Criador
             artist_name = ""
@@ -826,12 +831,11 @@ def generate_weekly_whatsapp_message():
                 
             
             # Linha: *RANK. NOME_DO_ITEM* - ARTISTA (Streams/Views)
-            # Verifica se item_name está vazio, se estiver, usa o nome do artista para evitar o asterisco vazio.
+            # A linha principal agora garante que o item_name (nome da música) seja o primeiro elemento negrito
             display_item_name = item_name if item_name else "N/A"
             
             artist_display = f" - {artist_name}" if artist_name else ""
             
-            # A linha principal agora garante que o item_name (nome da música) seja o primeiro elemento negrito
             message_parts.append(f"*{rank}. {display_item_name}*{artist_display}{stream_info}")
             
             # Linha Secundária (Detalhamento)
@@ -839,12 +843,12 @@ def generate_weekly_whatsapp_message():
             
         message_parts.append(f"---------------------------------------")
 
-    # --- RODAPÉ DA MENSAGEM (CORRIGIDO PARA LINK) ---
+    # --- RODAPÉ DA MENSAGEM ---
     message_parts.append(f"\nAcesse o dashboard completo para mais detalhes:")
     message_parts.append(f"https://vybbe-charts.streamlit.app/")
 
     return "\n".join(message_parts)
-# ----- Fim 
+
 # --- Estrutura principal do aplicativo (Não alterada) ---
 try:
     imagem_logo = Image.open('logo_Charts.jpg')
