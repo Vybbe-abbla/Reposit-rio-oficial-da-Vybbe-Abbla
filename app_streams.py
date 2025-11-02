@@ -641,9 +641,11 @@ def generate_whatsapp_message():
     # Mapeamento: (sheet_index, chart_name_prefix, item_col, platform_name, is_youtube)
     daily_charts_config = [
         (5, "Spotify - Diário Top Músicas Brasil", 'Música', 'Spotify', False),
+        (9, "Spotify - Diário Viral Músicas Brasil", 'Música', 'Spotify', False), 
         (4, "Spotify - Diário Top Músicas Global", 'Música', 'Spotify', False),
+        (8, "Spotify - Diário Viral Músicas Global", 'Música', 'Spotify', False),
         (18, "YouTube - Top Vídeos Diários Brasil", 'Música', 'YouTube', True),
-        (12, "DEEZER - Diário Top Músicas", 'Música', 'DEEZER', False),
+        (12, "Deezer - Diário Top Músicas", 'Música', 'DEEZER', False),
         (13, "Amazon - Diário Top Músicas Amazon", 'Música', 'Amazon', False),
         (14, "Apple Music - Diário Top Músicas Apple Music", 'Música', 'Apple Music', False),
     ]
