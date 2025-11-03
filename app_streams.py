@@ -140,9 +140,6 @@ def format_br_number(number):
         # 1. Limpeza
         number_str = str(number).strip()
         
-        # Remove separadores de milhar (ponto e vírgula) para obter o valor numérico puro.
-        # CORREÇÃO ADICIONADA: O GSheets pode retornar números como strings "2,319,970" ou "2.319.970"
-        # Precisamos de um valor numérico puro para formatar: 2319970
         number_pure = number_str.replace('.', '').replace(',', '')
         
         # Se for um float (e.g. 2319970.0), converte para int para evitar casa decimal
@@ -847,7 +844,7 @@ def generate_weekly_whatsapp_message():
 
     # --- RODAPÉ DA MENSAGEM ---
     message_parts.append(f"\nAcesse o dashboard completo para mais detalhes:")
-    message_parts.append(f"https://vybbe-charts.streamlit.app/")
+    message_parts.append(f"https://vybbestreams.streamlit.app/")
 
     return "\n".join(message_parts)
 
