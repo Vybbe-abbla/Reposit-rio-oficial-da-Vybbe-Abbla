@@ -12,5 +12,6 @@ python-dotenv>=1.1.1
 xlsxwriter>=3.2.5
 vaderSentiment==3.3.2
 groq==0.33.0
+textblob==0.19.0
 
 
