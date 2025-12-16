@@ -65,7 +65,6 @@ def load_data(sheet_index):
 
 @st.cache_data
 def get_spotify_info(query, search_type='track', artist_context=""):
-    """Puxa o nome correto do álbum e a imagem via Spotify API."""
     client_id = st.secrets.get("SPOTIPY_CLIENT_ID") or os.getenv("SPOTIPY_CLIENT_ID")
     client_secret = st.secrets.get("SPOTIPY_CLIENT_SECRET") or os.getenv("SPOTIPY_CLIENT_SECRET")
     if not client_id: return None, None
@@ -83,18 +82,23 @@ def get_spotify_info(query, search_type='track', artist_context=""):
             primary_artist = artist_context.split(',')[0].strip()
             results = sp.search(q=f'track:"{query}" artist:"{primary_artist}"', type='track', limit=1)
             item = results['tracks']['items'][0]
-            # Retorna Nome do Álbum e Imagem do Álbum
             return item['album']['name'], item['album']['images'][0]['url']
     except: return query, None
 
-# --- UI do Aplicativo ---
+# --- Interface do Aplicativo ---
 st.title("📊 Overview Consolidado")
 
-artistas = sorted(["Xand Avião", "NATTAN", "Mari Fernandez", "Avine Vinny", "Felipe Amorim", "Zé Vaqueiro", "Léo Foguete"])
+# Tabela de Artistas atualizada e ordenada
+artistas_vybbe = sorted([
+    "Xand Avião", "NATTAN", "Avine Vinny", "Léo Foguete", "Felipe Amorim", 
+    "Zé Cantor", "Jonas Esticado", "Guilherme Dantas", "Manim Vaqueiro", 
+    "Mari Fernandez", "Zé Vaqueiro", "Talita Mel", "Lipe Lucena"
+])
+
 col_sel, col_perfil = st.columns([2, 1])
 
 with col_sel:
-    artista_sel = st.selectbox("Selecione o Artista:", artistas)
+    artista_sel = st.selectbox("Selecione o Artista para Pesquisa no Charts:", artistas_vybbe)
     gerar = st.button(f"Analisar {artista_sel}", type="primary")
 
 with col_perfil:
@@ -109,15 +113,18 @@ with col_perfil:
 
 if gerar:
     all_hits = []
+    # Percorre todas as abas mapeadas
     for idx, categoria in MAPA_CATEGORIAS.items():
         df = load_data(idx)
         if df.empty: continue
         
+        # Identificação de colunas para plataformas diferentes
         df.columns = [str(c).upper().strip() for c in df.columns]
         art_col = 'ARTISTA' if 'ARTISTA' in df.columns else 'CRIADOR'
         if art_col not in df.columns: continue
         
         df_art = df[df[art_col].astype(str).str.contains(artista_sel, case=False, na=False)]
+        
         if not df_art.empty:
             rank_col = 'RANK' if 'RANK' in df.columns else 'POSIÇÃO'
             best_idx = pd.to_numeric(df_art[rank_col], errors='coerce').idxmin()
@@ -128,7 +135,6 @@ if gerar:
             
             item_query = best.get('MÚSICA') or best.get('FAIXA') or best.get('VÍDEO') or best.get('ÁLBUM') or artista_sel
             
-            # Puxa informações do Spotify
             album_nome, img_url = get_spotify_info(item_query, tipo, artista_sel)
 
             all_hits.append({
@@ -139,14 +145,15 @@ if gerar:
                 "Tempo": best.get('DAYS_ON_CHART') or best.get('WEEKS_ON_CHART') or 'N/A',
                 "Streams": best.get('STREAMS') or best.get('VISUALIZAÇÕES SEMANAIS') or 'N/A',
                 "Data": best.get('DATA DE PICO') or best.get('DATA') or 'N/A',
-                "Img": img_url,
-                "Tipo": tipo
+                "Img": img_url
             })
 
+    # Verifica se encontrou algum dado para exibir a tabela ou a mensagem de erro
     if all_hits:
         st.write("---")
         h_cols = st.columns([0.5, 3, 0.7, 0.8, 1, 1.2])
-        for col, h in zip(h_cols, ["#", "MÚSICA/FAIXA", "Pico", "Tempo", "Streams", "Data"]):
+        headers = ["#", "MÚSICA/FAIXA", "Pico", "Tempo", "Streams", "Data"]
+        for col, h in zip(h_cols, headers):
             col.markdown(f"<p style='font-weight: bold; color: #888;'>{h}</p>", unsafe_allow_html=True)
         st.markdown("<hr style='margin: 0;'>", unsafe_allow_html=True)
 
@@ -158,7 +165,6 @@ if gerar:
                 sc1, sc2 = st.columns([1, 4])
                 if hit['Img']: sc1.image(hit['Img'], width=75)
                 
-                # Exibe Nome do Álbum se for Música
                 label_album = f"<br><span style='color: gray; font-size: 12px;'>Álbum: {hit['Album']}</span>" if hit['Album'] else ""
                 sc2.markdown(f"**{hit['Item']}**{label_album}\n\n<small style='color: #1DB954;'>{hit['Categoria']}</small>", unsafe_allow_html=True)
             
@@ -166,6 +172,21 @@ if gerar:
             c[3].write(hit['Tempo'])
             
             streams = hit['Streams']
-            c[4].write(f"{int(streams):,}".replace(",", ".") if isinstance(streams, (int, float)) else streams)
+            try:
+                formatted_streams = f"{int(float(str(streams).replace('.','').replace(',',''))):,}".replace(",", ".")
+                c[4].write(formatted_streams)
+            except:
+                c[4].write(streams)
+                
             c[5].write(str(hit['Data']))
             st.markdown("<hr style='margin: 10px 0; border: 0.1px solid #333;'>", unsafe_allow_html=True)
+    else:
+        # Mensagem personalizada para artistas sem registros nos charts
+        st.warning(f"### ℹ️ Informação")
+        st.info(f"O artista **{artista_sel}** ainda não possui registros de picos ou posições nos charts monitorados nesta planilha de 2025.")
+        st.markdown("""
+            Sugestões:
+            * Verifique se o lançamento do artista ocorreu recentemente.
+            * Confirme se o nome do artista está escrito corretamente na base de dados.
+            * Aguarde a próxima atualização dos dados de streaming.
+        """)
