@@ -15,9 +15,7 @@ def _format_date_for_prompt(dt: datetime) -> str:
 
 
 def _format_date_for_filter(dt: datetime) -> str:
-    # Formato aceito pelos filtros de data da Sonar: M/D/YYYY
-    # Docs: search_after_date / search_before_date. [web:41][web:45]
-    return dt.strftime("%m/%d/%Y")
+    return f"{dt.month}/{dt.day}/{dt.year}"
 
 
 def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
@@ -45,61 +43,44 @@ def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
     prompt = f"""
 Você é um assistente que monitora notícias e redes sociais de artistas musicais brasileiros.
 
-Regras de período (OBRIGATÓRIO):
+Regras de PERÍODO (obrigatórias):
 - Considere APENAS conteúdos publicados entre {inicio_prompt} e {fim_prompt}.
 - NÃO use notícias ou posts publicados fora desse intervalo, mesmo que sejam muito relevantes.
-- Se a maioria das notícias for antiga (por exemplo, 2021) e o período for 2025, você deve ignorá-las.
-- Se não encontrar nada dentro do intervalo, diga claramente que há "pouca ou nenhuma informação no período especificado".
-
-Contexto:
-- Eventos de crise, polêmica ou impacto na imagem do artista são prioridade.
-- Exemplos: separação, divórcio, brigas públicas, acusações, cancelamento de shows,
-  problemas de saúde, polêmicas em entrevistas, controvérsias nas redes sociais etc.
-- Um caso recente que NÃO pode ser ignorado quando estiver dentro do intervalo é a separação
-  de Zé Vaqueiro e Ingra Soares no fim de novembro de 2025, amplamente noticiada.
+- Se não encontrar quase nada dentro do intervalo, diga isso claramente no resumo e traga poucas notícias.
 
 Tarefa:
 - Pesquise as principais notícias e menções em redes sociais sobre o artista "{artista}"
-  SOMENTE no período de {inicio_prompt} até {fim_prompt}.
-- Dê prioridade máxima para crises, polêmicas, términos de relacionamento, separações
-  e escândalos que afetem a imagem do artista.
-- Em seguida, inclua lançamentos, clipes, anúncios de shows, parcerias, prêmios e outros fatos relevantes.
-- Considere fontes como: portais de notícia, Instagram, TikTok, YouTube, X/Twitter,
-  Facebook e outras plataformas de redes sociais.
-- Quando houver posts relevantes em alta no Instagram ou X/Twitter sobre o tema,
-  inclua pelo menos 1 ou 2 desses posts com o link direto para o post.
-- Responda em português do Brasil.
+  nesse intervalo de {inicio_prompt} até {fim_prompt}.
+- Dê prioridade para crises, polêmicas, separações, escândalos, além de lançamentos, shows e parcerias.
+- Considere fontes como portais de notícia, Instagram, TikTok, YouTube, X/Twitter, Facebook etc.
+- Quando houver posts relevantes no Instagram ou X/Twitter, inclua pelo menos 1 ou 2 com link direto.
 
-Formato de saída (JSON em texto, SEM explicações adicionais, apenas o objeto JSON):
+Formato DE SAÍDA (somente o JSON, sem texto extra):
 {{
-  "resumo_geral": "um parágrafo curto resumindo o que houve com o artista no período, enfatizando crises/polêmicas se houver",
+  "resumo_geral": "um parágrafo curto explicando o que houve com o artista no período",
   "noticias": [
     {{
       "titulo": "título da notícia ou post",
-      "descricao": "breve descrição do conteúdo ou contexto, explicando se é crise, polêmica, separação etc.",
-      "url": "link da fonte original (portal ou rede social, como Instagram ou X/Twitter)"
+      "descricao": "breve descrição do conteúdo ou contexto",
+      "url": "link da fonte original (portal ou rede social)"
     }}
   ]
 }}
-
-Instruções finais:
-- Inclua somente links reais e completos (https...) que estejam dentro do intervalo de datas.
-- Se não houver praticamente nada no período, reduza a lista de notícias e explique isso no resumo.
 """
 
-
     body = {
-        "model": MODEL_NAME,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt.strip(),
-            }
-        ],
-        # Filtros reais de data da Sonar (por data de publicação). [web:41][web:45]
-        "search_after_date": inicio_filter,
-        "search_before_date": fim_filter,
-    }
+    "model": MODEL_NAME,
+    "messages": [
+        {
+            "role": "user",
+            "content": prompt.strip(),
+        }
+    ],
+    # REMOVIDOS os filtros para evitar que zere a busca:
+    # "search_after_date_filter": inicio_filter,
+    # "search_before_date_filter": fim_filter,
+}
+
 
     response = requests.post(
         f"{BASE_URL}/chat/completions",
