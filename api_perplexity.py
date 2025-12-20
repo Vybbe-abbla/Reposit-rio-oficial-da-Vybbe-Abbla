@@ -41,23 +41,36 @@ def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
     fim_filter = _format_date_for_filter(data_fim)
 
     prompt = f"""
+
 Você é um assistente que monitora notícias e redes sociais de artistas musicais brasileiros.
 
-Regras de PERÍODO (obrigatórias):
-- Considere APENAS conteúdos publicados entre {inicio_prompt} e {fim_prompt}.
-- NÃO use notícias ou posts publicados fora desse intervalo, mesmo que sejam muito relevantes.
-- Se não encontrar quase nada dentro do intervalo, diga isso claramente no resumo e traga poucas notícias.
+Período definido pelo usuário:
+- Somente considere conteúdos publicados entre {inicio_prompt} e {fim_prompt}.
+- Se houver QUALQUER notícia, nota, matéria ou post relevante nesse intervalo,
+  você DEVE listar esses itens, mesmo que sejam poucos.
 
 Tarefa:
-- Pesquise as principais notícias e menções em redes sociais sobre o artista "{artista}"
-  nesse intervalo de {inicio_prompt} até {fim_prompt}.
-- Dê prioridade para crises, polêmicas, separações, escândalos, além de lançamentos, shows e parcerias.
-- Considere fontes como portais de notícia, Instagram, TikTok, YouTube, X/Twitter, Facebook etc.
-- Quando houver posts relevantes no Instagram ou X/Twitter, inclua pelo menos 1 ou 2 com link direto.
+- Pesquise as notícias e menções em redes sociais sobre o artista "{artista}"
+  no intervalo de {inicio_prompt} até {fim_prompt}.
+- Dê prioridade para:
+  - Crises, polêmicas, términos de relacionamento, separações, escândalos.
+  - Comunicados oficiais do artista ou da equipe.
+  - Anúncios de shows, turnês, lançamentos de músicas/clipes e parcerias.
+- Considere fontes como: portais de notícia, Instagram, TikTok, YouTube, X/Twitter,
+  Facebook e outras plataformas de redes sociais.
+- Quando houver posts relevantes (por exemplo, anúncio de turnê ou nota de esclarecimento
+  em Instagram ou X/Twitter), inclua pelo menos 1 ou 2 desses posts com o link direto.
 
-Formato DE SAÍDA (somente o JSON, sem texto extra):
+Regras importantes:
+- NÃO invente notícias.
+- NÃO use conteúdos fora do intervalo de {inicio_prompt} a {fim_prompt}.
+- Se encontrar notícias de datas fora do período, ignore essas e tente achar algo dentro.
+- Apenas se realmente não houver nada relevante nesse período, diga isso claramente
+  no "resumo_geral" e deixe a lista de "noticias" vazia.
+
+Formato de saída (apenas o JSON, sem texto extra):
 {{
-  "resumo_geral": "um parágrafo curto explicando o que houve com o artista no período",
+  "resumo_geral": "um parágrafo curto explicando o que houve com o artista no período (ou que quase nada foi encontrado)",
   "noticias": [
     {{
       "titulo": "título da notícia ou post",
@@ -71,16 +84,9 @@ Formato DE SAÍDA (somente o JSON, sem texto extra):
     body = {
     "model": MODEL_NAME,
     "messages": [
-        {
-            "role": "user",
-            "content": prompt.strip(),
-        }
+        {"role": "user", "content": prompt.strip()}
     ],
-    # REMOVIDOS os filtros para evitar que zere a busca:
-    # "search_after_date_filter": inicio_filter,
-    # "search_before_date_filter": fim_filter,
-}
-
+    }
 
     response = requests.post(
         f"{BASE_URL}/chat/completions",
