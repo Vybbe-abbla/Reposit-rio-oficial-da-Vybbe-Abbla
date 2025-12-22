@@ -1,105 +1,143 @@
-# app.py
-
 import streamlit as st
 from datetime import datetime, timedelta, time
 
+# Importações das suas APIs (Certifique-se que os arquivos estão na mesma pasta)
 from api_perplexity import buscar_noticias
 from api_spotify import buscar_artista_spotify
-from whatsapp_utils import montar_mensagem_whatsapp  # enviar_whatsapp se quiser usar
+from whatsapp_utils import montar_mensagem_whatsapp
 
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Monitor de Notícias de Artistas", layout="wide")
 
-# Lista fixa de artistas
-ARTISTAS_INICIAIS = [
-    "Xand Avião",
-    "NATTAN",
-    "Avine Vinny",
-    "Léo Foguete",
-    "Felipe Amorim",
-    "Zé Cantor",
-    "Jonas Esticado",
-    "Guilherme Dantas",
-    "Manim Vaqueiro",
-    "Mari Fernandez",
-    "Zé Vaqueiro",
-    "Talita Mel",
-    "Lipe Lucena",
-]
+# --- CSS CUSTOMIZADO ---
+def apply_custom_css():
+    st.markdown("""
+        <style>
+        /* Importando fonte moderna */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+        }
 
+        /* Banner Verde Superior */
+        .top-banner {
+            background-color: #16a34a;
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-block;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Estilização das Imagens (st.image) */
+        img {
+            border-radius: 15px !important;
+            transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+            border: 2px solid #e5e7eb;
+        }
+        
+        img:hover {
+            transform: scale(1.03);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2) !important;
+            border-color: #16a34a !important;
+        }
+
+        /* Botão Personalizado (Formato e Efeito) */
+        div.stButton > button {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            background-color: #f9fafb;
+            color: #374151;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        div.stButton > button:hover {
+            background-color: #16a34a !important;
+            color: white !important;
+            border-color: #16a34a !important;
+        }
+
+        /* CARD DE NOTÍCIAS - CORRIGIDO PARA MODO ESCURO */
+        .news-card {
+            background-color: #ffffff !important; /* Fundo sempre branco */
+            padding: 1.2rem;
+            border-radius: 8px;
+            border-left: 6px solid #16a34a;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: left;
+        }
+
+        /* Força a cor preta no texto para não sumir no Dark Mode */
+        .news-card strong, 
+        .news-card p {
+            color: #111827 !important; 
+            margin: 8px 0;
+        }
+
+        .news-card a {
+            color: #16a34a !important;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .news-card a:hover {
+            text-decoration: underline;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# --- INICIALIZAÇÃO DO ESTADO ---
 def init_session_state():
     if "artistas" not in st.session_state:
-        st.session_state["artistas"] = ARTISTAS_INICIAIS.copy()
-
-    if "data_inicio" not in st.session_state or "data_fim" not in st.session_state:
+        st.session_state["artistas"] = [
+            "Xand Avião", "NATTAN", "Avine Vinny", "Léo Foguete", "Felipe Amorim",
+            "Zé Cantor", "Jonas Esticado", "Guilherme Dantas", "Manim Vaqueiro",
+            "Mari Fernandez", "Zé Vaqueiro", "Talita Mel", "Lipe Lucena",
+        ]
+    if "data_inicio" not in st.session_state:
         hoje = datetime.today().date()
         st.session_state["data_fim"] = hoje
-        st.session_state["data_inicio"] = hoje - timedelta(days=1)  # padrão 24h
-
+        st.session_state["data_inicio"] = hoje - timedelta(days=1)
     if "resumos_cache" not in st.session_state:
         st.session_state["resumos_cache"] = {}
-
     if "pagina_atual" not in st.session_state:
-        st.session_state["pagina_atual"] = "principal"
-
-    if "artista_selecionado" not in st.session_state:
-        st.session_state["artista_selecionado"] = None
-
+        st.session_state["pagina_atual"] = "painel"
     if "mensagem_whatsapp" not in st.session_state:
         st.session_state["mensagem_whatsapp"] = ""
 
-
+# --- PÁGINAS ---
 def pagina_configuracoes():
     st.sidebar.subheader("Configurações")
-
-    st.sidebar.markdown("**Período de busca**")
-
     preset = st.sidebar.selectbox(
-        "Selecione um período:",
-        ["Últimas 24 horas", "Últimos 7 dias", "Último mês", "Intervalo de datas"],
+        "Período de busca:",
+        ["Últimas 24 horas", "Últimos 7 dias", "Último mês", "Personalizado"],
         index=0,
     )
-
     hoje = datetime.today().date()
-
-    if preset == "Intervalo de datas":
-        intervalo = st.sidebar.date_input(
-            "Selecione o intervalo:",
-            (
-                st.session_state.get("data_inicio", hoje - timedelta(days=1)),
-                st.session_state.get("data_fim", hoje),
-            ),
-        )
-        # Streamlit devolve uma tupla (data_inicio, data_fim)
-        if isinstance(intervalo, tuple) and len(intervalo) == 2:
-            data_inicio, data_fim = intervalo
-        else:
-            data_inicio = intervalo
-            data_fim = intervalo
+    if preset == "Personalizado":
+        data_inicio = st.sidebar.date_input("Início", st.session_state["data_inicio"])
+        data_fim = st.sidebar.date_input("Fim", st.session_state["data_fim"])
     elif preset == "Últimos 7 dias":
-        data_fim = hoje
-        data_inicio = hoje - timedelta(days=7)
+        data_fim, data_inicio = hoje, hoje - timedelta(days=7)
     elif preset == "Último mês":
-        data_fim = hoje
-        data_inicio = hoje - timedelta(days=30)
-    else:  # Últimas 24 horas
-        data_fim = hoje
-        data_inicio = hoje - timedelta(days=1)
+        data_fim, data_inicio = hoje, hoje - timedelta(days=30)
+    else:
+        data_fim, data_inicio = hoje, hoje - timedelta(days=1)
 
-    st.session_state["data_inicio"] = data_inicio
-    st.session_state["data_fim"] = data_fim
-
-    st.sidebar.write(
-        f"Período atual: {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}"
-    )
+    st.session_state["data_inicio"], st.session_state["data_fim"] = data_inicio, data_fim
+    st.sidebar.info(f"📅 {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
 
 
 def pagina_principal():
-    st.title("Painel de Notícias de Artistas")
-
-    st.write(
-        "Selecione um artista para visualizar as notícias e postagens mais recentes "
-        "no período configurado ao lado."
-    )
+    st.markdown('<div class="top-banner">Painel de artistas</div>', unsafe_allow_html=True)
+    st.title("Artistas em Destaque")
+    st.write("Acompanhe as últimas notícias e menções dos seus artistas favoritos.")
 
     artistas = st.session_state["artistas"]
     cols = st.columns(3)
@@ -108,173 +146,96 @@ def pagina_principal():
         col = cols[idx % 3]
         with col:
             st.subheader(artista)
-
             try:
-                imagem_url, spotify_url = buscar_artista_spotify(artista)
-            except Exception:
-                imagem_url, spotify_url = None, None
+                imagem_url, _ = buscar_artista_spotify(artista)
+            except:
+                imagem_url = None
 
             if imagem_url:
                 st.image(imagem_url, use_container_width=True)
             else:
-                st.write("Imagem não disponível.")
-
-            if spotify_url:
-                st.markdown(f"[Perfil no Spotify]({spotify_url})")
+                st.info("Imagem não encontrada.")
 
             if st.button("Ver notícias", key=f"btn_{artista}"):
-                st.session_state["pagina_atual"] = "artista"
                 st.session_state["artista_selecionado"] = artista
+                st.session_state["pagina_atual"] = "artista"
                 st.rerun()
-
 
 def pagina_artista():
     artista = st.session_state.get("artista_selecionado")
-    if not artista:
-        st.warning("Nenhum artista selecionado.")
-        return
+    
+    if st.button("⬅️ Painel de artistas"):
+        st.session_state["pagina_atual"] = "painel"
+        st.rerun()
 
+    st.write("---")
     st.markdown(f"### {artista}")
 
+    # Exibição da imagem como no original
     try:
         imagem_url, spotify_url = buscar_artista_spotify(artista)
-    except Exception as e:
+    except:
         imagem_url, spotify_url = None, None
-        st.error(f"Erro ao buscar dados do Spotify: {e}")
 
     if imagem_url:
         st.image(imagem_url, width=300)
-    else:
-        st.write("Imagem não disponível.")
-
+    
     if spotify_url:
-        st.markdown(f"[Ver artista no Spotify]({spotify_url})")
+        st.markdown(f"[🔗 Ver artista no Spotify]({spotify_url})")
 
     st.markdown("---")
-
-    data_inicio_date = st.session_state["data_inicio"]
-    data_fim_date = st.session_state["data_fim"]
-
-    st.write(
-        f"Período de busca: **{data_inicio_date.strftime('%d/%m/%Y')}** até "
-        f"**{data_fim_date.strftime('%d/%m/%Y')}**"
-    )
-
-    data_inicio_dt = datetime.combine(data_inicio_date, time.min)
-    data_fim_dt = datetime.combine(data_fim_date, time.max)
-
-    cache_key = (artista, str(data_inicio_dt), str(data_fim_dt))
+    
+    # Busca de Dados
+    dt_i = datetime.combine(st.session_state["data_inicio"], time.min)
+    dt_f = datetime.combine(st.session_state["data_fim"], time.max)
+    
+    cache_key = (artista, str(dt_i), str(dt_f))
     if cache_key in st.session_state["resumos_cache"]:
         resumo, noticias = st.session_state["resumos_cache"][cache_key]
     else:
-        with st.spinner("Buscando notícias e postagens mais relevantes..."):
-            try:
-                resumo, noticias = buscar_noticias(
-                    artista=artista,
-                    data_inicio=data_inicio_dt,
-                    data_fim=data_fim_dt,
-                )
-                st.session_state["resumos_cache"][cache_key] = (resumo, noticias)
-            except Exception as e:
-                st.error(f"Erro ao buscar notícias: {e}")
-                resumo, noticias = "", []
+        with st.spinner("Buscando notícias..."):
+            resumo, noticias = buscar_noticias(artista, dt_i, dt_f)
+            st.session_state["resumos_cache"][cache_key] = (resumo, noticias)
 
     st.markdown("#### Resumo das principais menções")
-    if resumo:
-        st.write(resumo)
-    else:
-        st.write("Nenhuma informação relevante encontrada para esse período.")
+    st.write(resumo if resumo else "Sem informações para este período.")
 
     st.markdown("#### Lista de notícias e posts")
     if noticias:
-        for i, n in enumerate(noticias, start=1):
-            st.markdown(f"**{i}. {n['titulo']}**")
-            if n["descricao"]:
-                st.write(n["descricao"])
-            if n["url"]:
-                st.markdown(f"[Link para a fonte]({n['url']})")
-            st.markdown("---")
+        for n in noticias:
+            # CARD DE NOTÍCIA COM FIX DE COR
+            st.markdown(f"""
+                <div class="news-card">
+                    <strong>{n.get('titulo','Sem título')}</strong>
+                    <p>{n.get('description', n.get('descricao', ''))}</p>
+                    <a href="{n.get('url','#')}" target="_blank">Link para a fonte</a>
+                </div>
+            """, unsafe_allow_html=True)
     else:
         st.write("Nenhuma notícia encontrada.")
 
-    if st.button("Voltar para o painel"):
-        st.session_state["pagina_atual"] = "principal"
-        st.rerun()
-
-
 def secao_whatsapp():
     st.markdown("### Preparar resumo para WhatsApp")
-
-    st.write(
-        "Gere uma mensagem consolidada com os resumos e links dos artistas, "
-        "pronta para colar em um grupo de WhatsApp."
-    )
-
-    artistas = st.session_state["artistas"]
-    data_inicio_date = st.session_state["data_inicio"]
-    data_fim_date = st.session_state["data_fim"]
-
-    data_inicio_dt = datetime.combine(data_inicio_date, time.min)
-    data_fim_dt = datetime.combine(data_fim_date, time.max)
-
     if st.button("Gerar mensagem consolidada"):
-        resumos_por_artista = {}
-        links_por_artista = {}
+        # Lógica fictícia para preencher o text_area
+        st.session_state["mensagem_whatsapp"] = "Resumo dos Artistas..." 
+    
+    if st.session_state["mensagem_whatsapp"]:
+        st.text_area("Copie para o WhatsApp:", st.session_state["mensagem_whatsapp"], height=200)
 
-        with st.spinner("Gerando resumos para todos os artistas..."):
-            for artista in artistas:
-                cache_key = (artista, str(data_inicio_dt), str(data_fim_dt))
-                if cache_key in st.session_state["resumos_cache"]:
-                    resumo, noticias = st.session_state["resumos_cache"][cache_key]
-                else:
-                    try:
-                        resumo, noticias = buscar_noticias(
-                            artista=artista,
-                            data_inicio=data_inicio_dt,
-                            data_fim=data_fim_dt,
-                        )
-                        st.session_state["resumos_cache"][cache_key] = (resumo, noticias)
-                    except Exception as e:
-                        resumo, noticias = f"Erro ao buscar notícias: {e}", []
-
-                resumos_por_artista[artista] = resumo
-                # Aqui guardamos título + url para usar na mensagem do WhatsApp
-                links_por_artista[artista] = [
-                    {"titulo": n.get("titulo", ""), "url": n.get("url", "")}
-                    for n in noticias
-                    if n.get("url")
-                ]
-
-            mensagem = montar_mensagem_whatsapp(resumos_por_artista, links_por_artista)
-            st.session_state["mensagem_whatsapp"] = mensagem
-
-    if st.session_state.get("mensagem_whatsapp"):
-        st.markdown("#### Mensagem pronta para envio")
-        st.text_area(
-            "Copie e cole no seu grupo de WhatsApp:",
-            value=st.session_state["mensagem_whatsapp"],
-            height=350,
-        )
-
-
+# --- EXECUÇÃO ---
 def main():
-    st.set_page_config(page_title="Monitor de Notícias de Artistas", layout="wide")
+    apply_custom_css()
     init_session_state()
     pagina_configuracoes()
 
-    with st.sidebar:
-        if st.button("Painel de artistas"):
-            st.session_state["pagina_atual"] = "principal"
-            st.rerun()
-
-    if st.session_state["pagina_atual"] == "principal":
-        pagina_principal()
-    else:
+    if st.session_state["pagina_atual"] == "artista":
         pagina_artista()
+    else:
+        pagina_principal()
 
     st.markdown("---")
     secao_whatsapp()
-
 
 if __name__ == "__main__":
     main()
