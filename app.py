@@ -164,7 +164,7 @@ def pagina_principal():
 def pagina_artista():
     artista = st.session_state.get("artista_selecionado")
     
-    if st.button("⬅️ Painel de artistas"):
+    if st.button("⬅️ Painel de artistas",use_container_width=True):
         st.session_state["pagina_atual"] = "painel"
         st.rerun()
 
