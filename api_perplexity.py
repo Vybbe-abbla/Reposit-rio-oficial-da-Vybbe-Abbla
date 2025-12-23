@@ -1,11 +1,12 @@
 # api_perplexity.py
 
 import os
-import requests
+import json
 from datetime import datetime
 
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+import requests
 
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 BASE_URL = "https://api.perplexity.ai"
 MODEL_NAME = "sonar-pro"
 
@@ -22,6 +23,7 @@ def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
     """
     Busca notícias e posts de redes sociais relevantes sobre um artista
     SOMENTE dentro do intervalo de datas informado.
+    (Busca geral: não é exclusiva de crise, mas dá prioridade a temas mais relevantes.)
     """
     if not PERPLEXITY_API_KEY:
         raise ValueError(
@@ -36,12 +38,10 @@ def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
 
     inicio_prompt = _format_date_for_prompt(data_inicio)
     fim_prompt = _format_date_for_prompt(data_fim)
-
     inicio_filter = _format_date_for_filter(data_inicio)
     fim_filter = _format_date_for_filter(data_fim)
 
     prompt = f"""
-
 Você é um assistente que monitora notícias e redes sociais de artistas musicais brasileiros.
 
 Período definido pelo usuário:
@@ -49,15 +49,51 @@ Período definido pelo usuário:
 - Se houver QUALQUER notícia, nota, matéria ou post relevante nesse intervalo,
   você DEVE listar esses itens, mesmo que sejam poucos.
 
-Tarefa:
-- Pesquise as notícias e menções em redes sociais sobre o artista "{artista}"
-  no intervalo de {inicio_prompt} até {fim_prompt}.
-- Dê prioridade para:
-  - Crises, polêmicas, términos de relacionamento, separações, escândalos.
-  - Comunicados oficiais do artista ou da equipe.
-  - Anúncios de shows, turnês, lançamentos de músicas/clipes e parcerias.
-- Considere fontes como: portais de notícia, Instagram, TikTok, YouTube, X/Twitter,
-  Facebook e outras plataformas de redes sociais.
+Artista alvo:
+- "{artista}"
+
+Tipos de conteúdo que devem ser PRIORITÁRIOS nesta busca geral:
+- Crises, polêmicas, términos de relacionamento, separações, escândalos.
+- Comunicados oficiais do artista ou da equipe.
+- Anúncios de shows, turnês, lançamentos de músicas/clipes e parcerias.
+- Momentos importantes de carreira (prêmios, grandes feats, mudanças de equipe, etc.).
+
+FONTES PRIORITÁRIAS (quando houver notícias sobre o artista nelas):
+SITES/PORTAIS:
+- https://hugogloss.uol.com.br/
+- https://portalleodias.com/
+- https://palcopop.com/
+- https://portaldosfamosos.com.br/
+- https://www.purepeople.com.br/
+- https://www.purepeople.com.br/noticias/1
+- https://billboard.com.br/
+- https://www.terra.com.br/diversao/gente/
+- https://alfinetei.com.br/
+- https://veja.abril.com.br/noticias-sobre/musica-brasileira/
+- https://www.areavip.com.br/
+
+PERFIS / PÁGINAS NO INSTAGRAM (considere também notícias/fofocas replicadas em portais):
+- @gossipdodia
+- @redefrancesfm
+- @quem
+- @portaldosartistasoficial
+- @hugogloss
+- @segueacami
+- @purepeoplebrasil
+- @danielneblina
+- @pbtododia
+- @fluxodamusica
+- @gossipdafama
+- @billboardbr
+- @ielcast
+- @subcelebrities
+- @portaldiario
+- @ahoradavenenosa
+- @karllos_kosta
+
+Outras fontes que também podem ser consideradas:
+- Portais de notícia nacionais e regionais.
+- Instagram, TikTok, YouTube, X/Twitter, Facebook e outras plataformas de redes sociais.
 - Quando houver posts relevantes (por exemplo, anúncio de turnê ou nota de esclarecimento
   em Instagram ou X/Twitter), inclua pelo menos 1 ou 2 desses posts com o link direto.
 
@@ -82,10 +118,10 @@ Formato de saída (apenas o JSON, sem texto extra):
 """
 
     body = {
-    "model": MODEL_NAME,
-    "messages": [
-        {"role": "user", "content": prompt.strip()}
-    ],
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "user", "content": prompt.strip()}
+        ],
     }
 
     response = requests.post(
@@ -96,13 +132,12 @@ Formato de saída (apenas o JSON, sem texto extra):
     )
     response.raise_for_status()
     data = response.json()
-
     content = data["choices"][0]["message"]["content"]
 
-    import json
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError:
+        # Se o modelo não devolver JSON puro, devolve texto bruto e lista vazia
         return content, []
 
     resumo = parsed.get("resumo_geral", "").strip()
