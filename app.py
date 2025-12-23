@@ -259,6 +259,14 @@ def secao_whatsapp():
 
             mensagem = montar_mensagem_whatsapp(resumos_por_artista, links_por_artista)
             st.session_state["mensagem_whatsapp"] = mensagem
+            
+    if st.session_state.get("mensagem_whatsapp"):
+        st.markdown("#### Mensagem pronta para envio")
+        st.text_area(
+            "Copie e cole no seu grupo de WhatsApp:",
+            value=st.session_state["mensagem_whatsapp"],
+            height=350,
+        )
 
 
 # --- EXECUÇÃO ---
