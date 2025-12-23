@@ -138,22 +138,24 @@ Formato de saída (apenas o JSON, sem texto extra):
     content = data["choices"][0]["message"]["content"]
 
     try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        # Se o modelo não devolver JSON puro, devolve texto bruto e lista vazia
-        return content, []
+        # Tenta extrair o bloco JSON de dentro do texto (caso a IA mande conversa fiada)
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            content_json = json_match.group(0)
+            parsed = json.loads(content_json)
+            resumo = parsed.get("resumo_geral", "").strip()
+            noticias_brutas = parsed.get("noticias", []) or []
+        else:
+            # Se não achar JSON, assume que o texto todo é o resumo
+            resumo = content.strip()
+            noticias_brutas = []
+            
+    except Exception:
+        # Fallback total
+        resumo = content.strip()
+        noticias_brutas = []
 
-    resumo = parsed.get("resumo_geral", "").strip()
-    noticias_brutas = parsed.get("noticias", []) or []
+    # Limpeza final: Se o resumo ainda contiver chaves de JSON por erro, removemos
+    resumo = re.sub(r'\{.*"resumo_geral":\s*"|",\s*"noticias":.*\}', '', resumo, flags=re.DOTALL)
 
-    noticias = []
-    for n in noticias_brutas:
-        noticias.append(
-            {
-                "titulo": n.get("titulo") or "Sem título",
-                "descricao": n.get("descricao") or "",
-                "url": n.get("url") or "",
-            }
-        )
-
-    return resumo, noticias
+    return resumo, noticias_brutas

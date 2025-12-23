@@ -261,9 +261,12 @@ def secao_whatsapp():
                     for n in noticias if n.get("url")
                 ]
 
-            mensagem = montar_mensagem_whatsapp(resumos_por_artista, links_por_artista)
-            st.session_state["mensagem_whatsapp"] = mensagem
-            
+            mensagem = montar_mensagem_whatsapp(
+                resumos_por_artista, 
+                links_por_artista,
+                st.session_state["data_inicio"],
+                st.session_state["data_fim"]
+            )
     if st.session_state.get("mensagem_whatsapp"):
         st.text_area("Copie e cole no seu grupo de WhatsApp:", 
                      value=st.session_state["mensagem_whatsapp"], height=350)

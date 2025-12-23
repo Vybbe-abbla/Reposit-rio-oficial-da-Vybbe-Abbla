@@ -28,29 +28,37 @@ def enviar_whatsapp(mensagem: str, token: str, phone_id: str, destinatario: str)
     return response.json()
 
 
-def montar_mensagem_whatsapp(resumos_por_artista: dict, links_por_artista: dict) -> str:
+def montar_mensagem_whatsapp(resumos_por_artista, links_por_artista, data_inicio, data_fim):
     """
-    Gera mensagem consolidada com resumos e principais notícias por artista.
-
-    resumos_por_artista: {nome: resumo}
-    links_por_artista: {nome: [ {"titulo": str, "url": str}, ... ]}
+    Cria uma mensagem formatada com negritos, emojis e links para WhatsApp.
     """
-    linhas = []
-    linhas.append("Resumo de notícias dos artistas:\n")
+    msg = []
+    msg.append(f"*🚀 RESUMO DIÁRIO - MONITOR DE ARTISTAS*")
+    msg.append(f"📅 Período: {data_inicio.strftime('%d/%m')} a {data_fim.strftime('%d/%m/%Y')}")
+    msg.append("—" * 20)
 
     for artista, resumo in resumos_por_artista.items():
-        linhas.append(f"*{artista}*")
-        linhas.append(resumo.strip() or "Nenhuma notícia relevante encontrada no período.")
+        # Cabeçalho do Artista
+        msg.append(f"\n*🎵 {artista.upper()}*")
+        
+        # Resumo (Garante que não seja JSON e limpa espaços)
+        if not resumo or "resumo_geral" in resumo:
+            resumo = "Nenhuma menção relevante encontrada no período."
+        
+        msg.append(f"{resumo}")
 
+        # Links/Notícias
         noticias = links_por_artista.get(artista, [])
         if noticias:
-            linhas.append("Principais matérias:")
-            for n in noticias[:5]:
-                titulo = n.get("titulo", "").strip() or "Matéria"
-                url = n.get("url", "").strip()
+            msg.append("\n*Principais links:*")
+            for n in noticias[:3]: # Limita a 3 links para não ficar gigante
+                titulo = n.get('titulo', 'Link')
+                url = n.get('url', '')
                 if url:
-                    # Formato: Título – link
-                    linhas.append(f"- {titulo} – {url}")
-        linhas.append("")  # linha em branco
+                    msg.append(f"🔗 {titulo}: {url}")
+        
+        msg.append("\n" + "—" * 15)
 
-    return "\n".join(linhas).strip()
+    msg.append("\n_Gerado automaticamente pelo Painel de Monitoramento_")
+    
+    return "\n".join(msg)
