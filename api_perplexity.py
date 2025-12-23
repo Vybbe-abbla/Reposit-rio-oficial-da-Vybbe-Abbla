@@ -1,63 +1,159 @@
+# api_perplexity.py
+
 import os
-import requests
 import json
 from datetime import datetime
+
+import requests
 
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 BASE_URL = "https://api.perplexity.ai"
 MODEL_NAME = "sonar-pro"
 
+
 def _format_date_for_prompt(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M")
 
+
+def _format_date_for_filter(dt: datetime) -> str:
+    return f"{dt.month}/{dt.day}/{dt.year}"
+
+
 def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
+    """
+    Busca notícias e posts de redes sociais relevantes sobre um artista
+    SOMENTE dentro do intervalo de datas informado.
+    (Busca geral: não é exclusiva de crise, mas dá prioridade a temas mais relevantes.)
+    """
     if not PERPLEXITY_API_KEY:
-        raise ValueError("PERPLEXITY_API_KEY não definido.")
+        raise ValueError(
+            "PERPLEXITY_API_KEY não está definido. "
+            "Preencha o valor em api_perplexity.py ou via variável de ambiente."
+        )
+
+    headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json",
+    }
 
     inicio_prompt = _format_date_for_prompt(data_inicio)
     fim_prompt = _format_date_for_prompt(data_fim)
+    inicio_filter = _format_date_for_filter(data_inicio)
+    fim_filter = _format_date_for_filter(data_fim)
 
-    # Prompt otimizado para Deep Research (estilo Sonar-Pro)
     prompt = f"""
-Você é um especialista em monitoramento de mídia. Realize uma pesquisa profunda sobre o artista "{artista}".
-INTERVALO OBRIGATÓRIO: de {inicio_prompt} até {fim_prompt}.
+Você é um assistente que monitora notícias e redes sociais de artistas musicais brasileiros.
 
-TAREFA:
-- Identifique shows específicos (nomes de eventos, locais, cidades), lançamentos e polêmicas no período.
-- Priorize detalhes jornalísticos (ex: "Show no Natal do Chacon em Recife").
-- Se não houver nada no período, relate a última atividade oficial conhecida no resumo_geral.
+Período definido pelo usuário:
+- Somente considere conteúdos publicados entre {inicio_prompt} e {fim_prompt}.
+- Se houver QUALQUER notícia, nota, matéria ou post relevante nesse intervalo,
+  você DEVE listar esses itens, mesmo que sejam poucos.
 
-FORMATO DE SAÍDA (Retorne APENAS o JSON abaixo):
+Artista alvo:
+- "{artista}"
+
+Tipos de conteúdo que devem ser PRIORITÁRIOS nesta busca geral:
+- Crises, polêmicas, términos de relacionamento, separações, escândalos.
+- Comunicados oficiais do artista ou da equipe.
+- Anúncios de shows, turnês, lançamentos de músicas/clipes e parcerias.
+- Momentos importantes de carreira (prêmios, grandes feats, mudanças de equipe, etc.).
+
+FONTES PRIORITÁRIAS (quando houver notícias sobre o artista nelas):
+SITES/PORTAIS:
+- https://hugogloss.uol.com.br/
+- https://portalleodias.com/
+- https://palcopop.com/
+- https://portaldosfamosos.com.br/
+- https://www.purepeople.com.br/
+- https://www.purepeople.com.br/noticias/1
+- https://billboard.com.br/
+- https://www.terra.com.br/diversao/gente/
+- https://alfinetei.com.br/
+- https://veja.abril.com.br/noticias-sobre/musica-brasileira/
+- https://www.areavip.com.br/
+
+PERFIS / PÁGINAS NO INSTAGRAM (considere também notícias/fofocas replicadas em portais):
+- @gossipdodia
+- @redefrancesfm
+- @quem
+- @portaldosartistasoficial
+- @hugogloss
+- @segueacami
+- @purepeoplebrasil
+- @danielneblina
+- @pbtododia
+- @fluxodamusica
+- @gossipdafama
+- @billboardbr
+- @ielcast
+- @subcelebrities
+- @portaldiario
+- @ahoradavenenosa
+- @karllos_kosta
+- @blogsocial1
+- @tvjornalsbt
+- @ondetempe
+
+Outras fontes que também podem ser consideradas:
+- Portais de notícia nacionais e regionais.
+- Instagram, TikTok, YouTube, X/Twitter, Facebook e outras plataformas de redes sociais.
+- Quando houver posts relevantes (por exemplo, anúncio de turnê ou nota de esclarecimento
+  em Instagram ou X/Twitter), inclua pelo menos 1 ou 2 desses posts com o link direto.
+
+Regras importantes:
+- NÃO invente notícias.
+- NÃO use conteúdos fora do intervalo de {inicio_prompt} a {fim_prompt}.
+- Se encontrar notícias de datas fora do período, ignore essas e tente achar algo dentro.
+- Apenas se realmente não houver nada relevante nesse período, diga isso claramente
+  no "resumo_geral" e deixe a lista de "noticias" vazia.
+
+Formato de saída (apenas o JSON, sem texto extra):
 {{
-  "resumo_geral": "Parágrafo narrativo detalhado com os fatos do período.",
+  "resumo_geral": "um parágrafo curto explicando o que houve com o artista no período (ou que quase nada foi encontrado)",
   "noticias": [
     {{
-      "titulo": "Título da notícia ou post",
-      "descricao": "Detalhes contextuais com datas e locais",
-      "url": "Link direto da fonte"
+      "titulo": "título da notícia ou post",
+      "descricao": "breve descrição do conteúdo ou contexto",
+      "url": "link da fonte original (portal ou rede social)"
     }}
   ]
 }}
 """
 
-    headers = {"Authorization": f"Bearer {PERPLEXITY_API_KEY}", "Content-Type": "application/json"}
-    body = {"model": MODEL_NAME, "messages": [{"role": "user", "content": prompt.strip()}], "temperature": 0.2}
+    body = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "user", "content": prompt.strip()}
+        ],
+    }
 
-    response = requests.post(f"{BASE_URL}/chat/completions", json=body, headers=headers, timeout=60)
+    response = requests.post(
+        f"{BASE_URL}/chat/completions",
+        json=body,
+        headers=headers,
+        timeout=60,
+    )
     response.raise_for_status()
-    
-    content = response.json()["choices"][0]["message"]["content"]
-
-    # LIMPEZA DE MARKDOWN: Garante que o JSON seja processado corretamente sem aparecer texto bruto
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0].strip()
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0].strip()
+    data = response.json()
+    content = data["choices"][0]["message"]["content"]
 
     try:
         parsed = json.loads(content)
-        resumo = parsed.get("resumo_geral", "").strip()
-        noticias = parsed.get("noticias", []) or []
-        return resumo, noticias
     except json.JSONDecodeError:
-        return content, [] # Fallback caso a API mande apenas texto
+        # Se o modelo não devolver JSON puro, devolve texto bruto e lista vazia
+        return content, []
+
+    resumo = parsed.get("resumo_geral", "").strip()
+    noticias_brutas = parsed.get("noticias", []) or []
+
+    noticias = []
+    for n in noticias_brutas:
+        noticias.append(
+            {
+                "titulo": n.get("titulo") or "Sem título",
+                "descricao": n.get("descricao") or "",
+                "url": n.get("url") or "",
+            }
+        )
+
+    return resumo, noticias
