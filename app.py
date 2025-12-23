@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta, time
 
-# Importações das suas APIs (Certifique-se que os arquivos estão na mesma pasta)
+# Importações das suas APIs
 from api_perplexity import buscar_noticias
 from api_spotify import buscar_artista_spotify
 from whatsapp_utils import montar_mensagem_whatsapp
@@ -13,7 +13,6 @@ st.set_page_config(page_title="Monitor de Notícias de Artistas", layout="wide")
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* Importando fonte moderna */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
         html, body, [class*="css"] {
@@ -32,11 +31,12 @@ def apply_custom_css():
             margin-bottom: 0.5rem;
         }
 
-        /* Estilização das Imagens (st.image) */
+        /* Estilização das Imagens */
         img {
             border-radius: 15px !important;
             transition: transform 0.3s ease, box-shadow 0.3s ease !important;
             border: 2px solid #e5e7eb;
+            object-fit: cover;
         }
         
         img:hover {
@@ -45,15 +45,17 @@ def apply_custom_css():
             border-color: #16a34a !important;
         }
 
-        /* Botão Personalizado (Formato e Efeito) */
+        /* Botão Personalizado - Ajustado para Streamlit Cloud */
         div.stButton > button {
-            width: 100%;
-            border-radius: 8px;
-            border: 1px solid #d1d5db;
-            background-color: #f9fafb;
-            color: #374151;
-            font-weight: 600;
-            transition: all 0.2s ease;
+            width: 100% !important;
+            border-radius: 8px !important;
+            border: 1px solid #d1d5db !important;
+            background-color: #f9fafb !important;
+            color: #374151 !important;
+            font-weight: 600 !important;
+            padding: 0.5rem !important;
+            height: 45px !important;
+            transition: all 0.2s ease !important;
         }
         
         div.stButton > button:hover {
@@ -62,9 +64,9 @@ def apply_custom_css():
             border-color: #16a34a !important;
         }
 
-        /* CARD DE NOTÍCIAS - CORRIGIDO PARA MODO ESCURO */
+        /* CARD DE NOTÍCIAS - FIX PARA MODO ESCURO */
         .news-card {
-            background-color: #ffffff !important; /* Fundo sempre branco */
+            background-color: #ffffff !important;
             padding: 1.2rem;
             border-radius: 8px;
             border-left: 6px solid #16a34a;
@@ -73,11 +75,11 @@ def apply_custom_css():
             text-align: left;
         }
 
-        /* Força a cor preta no texto para não sumir no Dark Mode */
         .news-card strong, 
         .news-card p {
             color: #111827 !important; 
-            margin: 8px 0;
+            margin: 8px 0 !important;
+            display: block;
         }
 
         .news-card a {
@@ -91,6 +93,22 @@ def apply_custom_css():
         }
         </style>
     """, unsafe_allow_html=True)
+
+# --- FUNÇÃO PARA CORRIGIR EXIBIÇÃO DE JSON ---
+def tratar_dados_api(dados):
+    """Extrai os campos necessários se a API retornar um dicionário bruto."""
+    resumo = ""
+    noticias = []
+    
+    if isinstance(dados, dict):
+        resumo = dados.get("resumo_geral", "")
+        noticias = dados.get("noticias", [])
+    elif isinstance(dados, tuple) and len(dados) >= 2:
+        resumo, noticias = dados[0], dados[1]
+    else:
+        resumo = str(dados)
+        
+    return resumo, noticias
 
 # --- INICIALIZAÇÃO DO ESTADO ---
 def init_session_state():
@@ -133,7 +151,6 @@ def pagina_configuracoes():
     st.session_state["data_inicio"], st.session_state["data_fim"] = data_inicio, data_fim
     st.sidebar.info(f"📅 {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
 
-
 def pagina_principal():
     st.markdown('<div class="top-banner">Painel de artistas</div>', unsafe_allow_html=True)
     st.title("Artistas em Destaque")
@@ -156,7 +173,8 @@ def pagina_principal():
             else:
                 st.info("Imagem não encontrada.")
 
-            if st.button("Ver notícias", key=f"btn_{artista}"):
+            # use_container_width garante que o botão preencha o card no Cloud
+            if st.button(f"Ver notícias de {artista}", key=f"btn_{artista}", use_container_width=True):
                 st.session_state["artista_selecionado"] = artista
                 st.session_state["pagina_atual"] = "artista"
                 st.rerun()
@@ -164,14 +182,13 @@ def pagina_principal():
 def pagina_artista():
     artista = st.session_state.get("artista_selecionado")
     
-    if st.button("⬅️ Painel de artistas",use_container_width=True):
+    if st.button("⬅️ Painel de artistas", use_container_width=True):
         st.session_state["pagina_atual"] = "painel"
         st.rerun()
 
     st.write("---")
     st.markdown(f"### {artista}")
 
-    # Exibição da imagem como no original
     try:
         imagem_url, spotify_url = buscar_artista_spotify(artista)
     except:
@@ -185,7 +202,6 @@ def pagina_artista():
 
     st.markdown("---")
     
-    # Busca de Dados
     dt_i = datetime.combine(st.session_state["data_inicio"], time.min)
     dt_f = datetime.combine(st.session_state["data_fim"], time.max)
     
@@ -194,7 +210,9 @@ def pagina_artista():
         resumo, noticias = st.session_state["resumos_cache"][cache_key]
     else:
         with st.spinner("Buscando notícias..."):
-            resumo, noticias = buscar_noticias(artista, dt_i, dt_f)
+            dados_brutos = buscar_noticias(artista, dt_i, dt_f)
+            # CORREÇÃO: Trata os dados para não exibir o JSON
+            resumo, noticias = tratar_dados_api(dados_brutos)
             st.session_state["resumos_cache"][cache_key] = (resumo, noticias)
 
     st.markdown("#### Resumo das principais menções")
@@ -203,11 +221,10 @@ def pagina_artista():
     st.markdown("#### Lista de notícias e posts")
     if noticias:
         for n in noticias:
-            # CARD DE NOTÍCIA COM FIX DE COR
             st.markdown(f"""
                 <div class="news-card">
                     <strong>{n.get('titulo','Sem título')}</strong>
-                    <p>{n.get('description', n.get('descricao', ''))}</p>
+                    <p>{n.get('descricao', n.get('description', ''))}</p>
                     <a href="{n.get('url','#')}" target="_blank">Link para a fonte</a>
                 </div>
             """, unsafe_allow_html=True)
@@ -216,60 +233,41 @@ def pagina_artista():
 
 def secao_whatsapp():
     st.markdown("### Preparar resumo para WhatsApp")
-
-    st.write(
-        "Gere uma mensagem consolidada com os resumos e links dos artistas, "
-        "pronta para colar em um grupo de WhatsApp."
-    )
-
+    
     artistas = st.session_state["artistas"]
-    data_inicio_date = st.session_state["data_inicio"]
-    data_fim_date = st.session_state["data_fim"]
+    dt_i = datetime.combine(st.session_state["data_inicio"], time.min)
+    dt_f = datetime.combine(st.session_state["data_fim"], time.max)
 
-    data_inicio_dt = datetime.combine(data_inicio_date, time.min)
-    data_fim_dt = datetime.combine(data_fim_date, time.max)
-
-    if st.button("Gerar mensagem consolidada"):
+    if st.button("Gerar mensagem consolidada", use_container_width=True):
         resumos_por_artista = {}
         links_por_artista = {}
 
         with st.spinner("Gerando resumos para todos os artistas..."):
             for artista in artistas:
-                cache_key = (artista, str(data_inicio_dt), str(data_fim_dt))
+                cache_key = (artista, str(dt_i), str(dt_f))
                 if cache_key in st.session_state["resumos_cache"]:
                     resumo, noticias = st.session_state["resumos_cache"][cache_key]
                 else:
                     try:
-                        resumo, noticias = buscar_noticias(
-                            artista=artista,
-                            data_inicio=data_inicio_dt,
-                            data_fim=data_fim_dt,
-                        )
+                        dados = buscar_noticias(artista, dt_i, dt_f)
+                        resumo, noticias = tratar_dados_api(dados)
                         st.session_state["resumos_cache"][cache_key] = (resumo, noticias)
-                    except Exception as e:
-                        resumo, noticias = f"Erro ao buscar notícias: {e}", []
+                    except:
+                        resumo, noticias = "Erro na busca", []
 
                 resumos_por_artista[artista] = resumo
-                # Aqui guardamos título + url para usar na mensagem do WhatsApp
                 links_por_artista[artista] = [
                     {"titulo": n.get("titulo", ""), "url": n.get("url", "")}
-                    for n in noticias
-                    if n.get("url")
+                    for n in noticias if n.get("url")
                 ]
 
             mensagem = montar_mensagem_whatsapp(resumos_por_artista, links_por_artista)
             st.session_state["mensagem_whatsapp"] = mensagem
             
     if st.session_state.get("mensagem_whatsapp"):
-        st.markdown("#### Mensagem pronta para envio")
-        st.text_area(
-            "Copie e cole no seu grupo de WhatsApp:",
-            value=st.session_state["mensagem_whatsapp"],
-            height=350,
-        )
+        st.text_area("Copie e cole no seu grupo de WhatsApp:", 
+                     value=st.session_state["mensagem_whatsapp"], height=350)
 
-
-# --- EXECUÇÃO ---
 def main():
     apply_custom_css()
     init_session_state()
