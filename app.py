@@ -181,7 +181,7 @@ def pagina_artista():
         st.image(imagem_url, width=300)
     
     if spotify_url:
-        st.markdown(f"[🔗 Ver artista no Spotify]({spotify_url})")
+        st.markdown(f"[Ver artista no Spotify]({spotify_url})")
 
     st.markdown("---")
     
@@ -216,12 +216,50 @@ def pagina_artista():
 
 def secao_whatsapp():
     st.markdown("### Preparar resumo para WhatsApp")
+
+    st.write(
+        "Gere uma mensagem consolidada com os resumos e links dos artistas, "
+        "pronta para colar em um grupo de WhatsApp."
+    )
+
+    artistas = st.session_state["artistas"]
+    data_inicio_date = st.session_state["data_inicio"]
+    data_fim_date = st.session_state["data_fim"]
+
+    data_inicio_dt = datetime.combine(data_inicio_date, time.min)
+    data_fim_dt = datetime.combine(data_fim_date, time.max)
+
     if st.button("Gerar mensagem consolidada"):
-        # Lógica fictícia para preencher o text_area
-        st.session_state["mensagem_whatsapp"] = "Resumo dos Artistas..." 
-    
-    if st.session_state["mensagem_whatsapp"]:
-        st.text_area("Copie para o WhatsApp:", st.session_state["mensagem_whatsapp"], height=200)
+        resumos_por_artista = {}
+        links_por_artista = {}
+
+        with st.spinner("Gerando resumos para todos os artistas..."):
+            for artista in artistas:
+                cache_key = (artista, str(data_inicio_dt), str(data_fim_dt))
+                if cache_key in st.session_state["resumos_cache"]:
+                    resumo, noticias = st.session_state["resumos_cache"][cache_key]
+                else:
+                    try:
+                        resumo, noticias = buscar_noticias(
+                            artista=artista,
+                            data_inicio=data_inicio_dt,
+                            data_fim=data_fim_dt,
+                        )
+                        st.session_state["resumos_cache"][cache_key] = (resumo, noticias)
+                    except Exception as e:
+                        resumo, noticias = f"Erro ao buscar notícias: {e}", []
+
+                resumos_por_artista[artista] = resumo
+                # Aqui guardamos título + url para usar na mensagem do WhatsApp
+                links_por_artista[artista] = [
+                    {"titulo": n.get("titulo", ""), "url": n.get("url", "")}
+                    for n in noticias
+                    if n.get("url")
+                ]
+
+            mensagem = montar_mensagem_whatsapp(resumos_por_artista, links_por_artista)
+            st.session_state["mensagem_whatsapp"] = mensagem
+
 
 # --- EXECUÇÃO ---
 def main():
