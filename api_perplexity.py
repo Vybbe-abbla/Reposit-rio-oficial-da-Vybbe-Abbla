@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 
 import requests
+import re
+import json
 
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 BASE_URL = "https://api.perplexity.ai"
