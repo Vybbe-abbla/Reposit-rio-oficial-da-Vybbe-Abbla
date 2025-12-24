@@ -10,7 +10,7 @@ import json
 
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 BASE_URL = "https://api.perplexity.ai"
-MODEL_NAME = "sonar-pro"
+MODEL_NAME = "sonar-pro (GX96)"
 
 
 def _format_date_for_prompt(dt: datetime) -> str:
@@ -44,7 +44,7 @@ def buscar_noticias(artista: str, data_inicio: datetime, data_fim: datetime):
     fim_filter = _format_date_for_filter(data_fim)
 
     prompt = f"""
-Você é um assistente que monitora notícias e redes sociais de artistas musicais brasileiros.
+Você é um assistente que monitora notícias e redes sociais de artistas musicais brasileiros do grupo Vybbe.
 
 Período definido pelo usuário:
 - Somente considere conteúdos publicados entre {inicio_prompt} e {fim_prompt}.
@@ -73,6 +73,8 @@ SITES/PORTAIS:
 - https://alfinetei.com.br/
 - https://veja.abril.com.br/noticias-sobre/musica-brasileira/
 - https://www.areavip.com.br/
+- https://fortal.com.br/
+- https://www.threads.com/
 
 PERFIS / PÁGINAS NO INSTAGRAM (considere também notícias/fofocas replicadas em portais):
 - @gossipdodia
@@ -98,6 +100,8 @@ PERFIS / PÁGINAS NO INSTAGRAM (considere também notícias/fofocas replicadas e
 -@neews_press
 -@jornalextra
 -@acerteiproducoes
+-@vemfestejarfortaleza
+
 
 Outras fontes que também podem ser consideradas:
 - Portais de notícia nacionais e regionais.
