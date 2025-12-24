@@ -95,6 +95,9 @@ PERFIS / PÁGINAS NO INSTAGRAM (considere também notícias/fofocas replicadas e
 - @blogsocial1
 - @tvjornalsbt
 - @ondetempe
+-@neews_press
+-@jornalextra
+-@acerteiproducoes
 
 Outras fontes que também podem ser consideradas:
 - Portais de notícia nacionais e regionais.
