@@ -708,7 +708,7 @@ def generate_whatsapp_message():
             
             # Verifica se é chart Weekly (para dias ou semanas)
             days_on_chart = row.get('days_on_chart', row.get('weeks_on_chart', row.get('Weeks_on_chart', 'N/A')))
-            days_label = "Dias" if sheet_index in [4, 5, 12, 13, 14, 18, 19] else "Semanas"
+            days_label = "Dias" if sheet_index in [4, 5, 8, 9, 12, 13, 14, 18, 19] else "Semanas"
             
             # Linha Principal (Negrito no Rank e Título da Música)
             stream_info = ""
