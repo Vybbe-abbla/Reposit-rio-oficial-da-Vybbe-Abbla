@@ -10,7 +10,7 @@ import json
 
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 BASE_URL = "https://api.perplexity.ai"
-MODEL_NAME = "sonar-pro (GX96)"
+MODEL_NAME = "sonar-pro"
 
 
 def _format_date_for_prompt(dt: datetime) -> str:
