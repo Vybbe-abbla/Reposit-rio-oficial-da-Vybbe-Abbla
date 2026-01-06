@@ -54,6 +54,7 @@ Período definido pelo usuário:
 Artista alvo:
 - "{artista}"
 
+traga as ultimas noticias do artista "{artista}" 
 Tipos de conteúdo que devem ser PRIORITÁRIOS nesta busca geral:
 - Crises, polêmicas, términos de relacionamento, separações, escândalos.
 - Comunicados oficiais do artista ou da equipe.
@@ -111,6 +112,7 @@ Outras fontes que também podem ser consideradas:
 
 Regras importantes:
 - NÃO invente notícias.
+- Sempre retorne pelo menos 1 a 3 notícias recentes sobre o artista, se existirem na web
 - NÃO use conteúdos fora do intervalo de {inicio_prompt} a {fim_prompt}.
 - Se encontrar notícias de datas fora do período, ignore essas e tente achar algo dentro.
 - Apenas se realmente não houver nada relevante nesse período, diga isso claramente
