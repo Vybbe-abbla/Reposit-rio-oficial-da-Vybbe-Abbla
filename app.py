@@ -81,16 +81,15 @@ def apply_custom_css():
             margin: 8px 0 !important;
             display: block;
         }
+        /* Foto circular para Segmentação */
+        .circular-img-config { width: 80px; height: 80px; border-radius: 50% !important; object-fit: cover; border: 2px solid #16a34a; }
 
-        .news-card a {
-            color: #16a34a !important;
-            font-weight: 700;
-            text-decoration: none;
-        }
+        div.stButton > button { width: 100% !important; border-radius: 8px !important; font-weight: 600 !important; height: 45px !important; margin-top: 5px; }
+        
+        /* Espaçador para Segmentação (Pedido 3) */
+        .segmentacao-spacer { margin-top: 50px; }
 
-        .news-card a:hover {
-            text-decoration: underline;
-        }
+        .news-card { background-color: #ffffff !important; padding: 1.2rem; border-radius: 8px; border-left: 6px solid #16a34a; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: #111827 !important; }
         </style>
     """, unsafe_allow_html=True)
 
