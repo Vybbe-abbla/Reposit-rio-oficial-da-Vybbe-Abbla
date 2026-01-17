@@ -56,7 +56,10 @@ def format_br_number(number):
         return f"{num_int:,}".replace(",", "X").replace(".", ",").replace("X", ".")
     except: return str(number)
 
-# --- INTERFACE ---
+rodape_image = Image.open('habbla_rodape.jpg')
+st.image(rodape_image, width=110)
+st.write("---")
+
 st.set_page_config(page_title='Comparativo Vybbe', layout="wide")
 
 st.header("📊 Comparativo de Performance (Linhas & Barras)")
@@ -100,7 +103,7 @@ if not df.empty:
     tipo = st.radio("Visualizar por:", ["Ranking", "Streams"], horizontal=True)
     
     y_col = "Rank" if tipo == "Ranking" else "Streams_Num"
-    text_col = "Rank" if tipo == "Ranking" else "Streams_Formatado" # Correção visibilidade
+    text_col = "Rank" if tipo == "Ranking" else "Streams_Formatado" 
 
     fig_line = px.line(df_filtered, x='DATA', y=y_col, color='Música', text=text_col, line_shape='spline', markers=True)
     fig_line.update_traces(textposition='top center')
@@ -118,7 +121,33 @@ if not df.empty:
     fig_bar = px.bar(df_primeira, x='Música', y='Streams_Num', color='Música', text='Streams_Formatado',
                      title="Volume de Streams no Primeiro Registro Encontrado")
     fig_bar.update_traces(textposition='outside')
+    fig_bar.update_layout(showlegend=False)
     st.plotly_chart(fig_bar, use_container_width=True)
 
 else:
     st.error("Não foi possível carregar os dados da planilha. Verifique os Secrets no Streamlit Cloud.")
+
+
+st.write("---")
+
+col1, col2 = st.columns([1, 4])
+
+with col1:
+    try:
+        rodape_image = Image.open('habbla_rodape.jpg')
+        st.image(rodape_image, width=110)
+    except FileNotFoundError:
+        st.write("Logo rodapé não encontrada.")
+
+with col2:
+    st.markdown(
+        """
+        <div style='font-size: 12px; color: gray;'>
+            Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2026 Habbla Marketing<br>
+            Versão 1.0.0 | Atualizado em: Janeiro/2026<br>
+            <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
+            <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
