@@ -5,6 +5,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 import tempfile
+from PIL import Image
 from datetime import datetime
 
 # --- CONFIGURAÇÃO E AUTENTICAÇÃO ---
