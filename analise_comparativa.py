@@ -114,13 +114,13 @@ if not df.empty:
 
     # 2. GRÁFICO DE BARRAS (Primeira data de entrada)
     st.write("---")
-    st.subheader("🚀 Impacto no Primeiro Dia de Registro")
+    st.subheader("🚀 Impacto Data de Lançamento Faixa")
     
     # Filtra apenas a primeira data de cada música no período selecionado
     df_primeira = df_filtered.sort_values('DATA').groupby('Música').head(1)
     
     fig_bar = px.bar(df_primeira, x='Música', y='Streams_Num', color='Música', text='Streams_Formatado',
-                     title="Volume de Streams no Primeiro Registro Encontrado")
+                     title="Volume de Streams Data de Lançamento",)
     fig_bar.update_traces(textposition='outside')
     fig_bar.update_layout(showlegend=False)
     st.plotly_chart(fig_bar, use_container_width=True)
