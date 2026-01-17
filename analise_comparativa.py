@@ -63,7 +63,7 @@ st.write("---")
 
 st.set_page_config(page_title='Comparativo Vybbe', layout="wide")
 
-st.header("📊 Comparativo de Performance (Linhas & Barras)")
+st.header("📊 Comparativo de Performance Faixas Top 200 Spotify Brasil")
 st.markdown("""
 Bem-vindo à ferramenta de **Inteligência Competitiva**. Este módulo permite:
 * **Comparar Performance Temporal:** Analise até 3 músicas simultaneamente no Ranking ou Streams.
