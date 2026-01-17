@@ -1,155 +1,124 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import os
+import tempfile
 from datetime import datetime
-from PIL import Image
-from app_streams import load_data, format_br_number, TZ
 
-def render_comparativo():
-     
-    rodape_image = Image.open('habbla_rodape.jpg')
-    st.image(rodape_image, width=110)
-
-    st.write("---")
-
-    st.header("📊 Comparativo de Performance")
-
-    st.markdown("""
-    Bem-vindo à ferramenta de **Inteligência Competitiva**. Este módulo permite:
-    * **Comparar Performance Temporal:** Analise até 3 músicas simultaneamente no Ranking ou Streams.
-    * **Análise de Lançamento:** O gráfico de barras foca no impacto inicial (primeiro registro) de cada faixa.
-    * **Filtros Personalizados:** Ajuste o período para identificar tendências e picos de audiência.
-    """)
-
-    st.write("---")
+# --- CONFIGURAÇÃO E AUTENTICAÇÃO ---
+def get_gspread_client():
+    google_sheets_creds_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
+    if not google_sheets_creds_json:
+        st.error("A variável de ambiente GOOGLE_SHEETS_CREDENTIALS não foi encontrada.")
+        return None
     
-    df = load_data(5)
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_creds_file:
+            temp_creds_file.write(google_sheets_creds_json)
+            temp_path = temp_creds_file.name
+        
+        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_name(temp_path, scopes)
+        client = gspread.authorize(creds)
+        os.remove(temp_path)
+        return client
+    except Exception as e:
+        st.error(f"Erro ao autenticar: {e}")
+        return None
+
+@st.cache_data
+def load_data_comparativo(sheet_index):
+    client = get_gspread_client()
+    if not client: return pd.DataFrame()
     
-    if df.empty:
-        st.error("Não foi possível carregar os dados da planilha.")
-        return
+    try:
+        planilha = client.open(title="2025_Charts")
+        worksheet = planilha.get_worksheet(sheet_index)
+        
+        # Ajuste de colunas específico para a planilha de índice 5
+        if sheet_index == 5:
+            expected_headers = ['DATA', 'Rank', 'uri', 'Artista', 'Música', 'source', 'peak_rank', 'previous_rank', 'days_on_chart', 'Corte charts', 'Data de Pico', 'Streams']
+            data = worksheet.get_all_records(expected_headers=expected_headers)
+        else:
+            data = worksheet.get_all_records()
+            
+        return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Erro ao carregar aba {sheet_index}: {e}")
+        return pd.DataFrame()
 
-    # Padronização de Colunas e Tipagem
-    date_col = 'DATA' if 'DATA' in df.columns else 'Data'
-    df[date_col] = pd.to_datetime(df[date_col], format="%d/%m/%Y")
-    
-    # Limpeza e conversão de Streams para numérico
-    df['Streams_Num'] = df['Streams'].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False)
-    df['Streams_Num'] = pd.to_numeric(df['Streams_Num'], errors='coerce')
-    # Criar coluna formatada para exibição (padrão BR)
-    df['y_axis_formatted'] = df['Streams_Num'].apply(lambda x: format_br_number(x))
+# --- FUNÇÕES DE FORMATAÇÃO ---
+def format_br_number(number):
+    try:
+        num_int = int(float(str(number).replace('.', '').replace(',', '')))
+        return f"{num_int:,}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except: return str(number)
 
-    # 2. Filtros de Seleção de Músicas
-    st.markdown("### Selecione as músicas para comparação")
-    qtd_comparacao = st.radio("Quantidade de músicas para comparar:", [2, 3], index=0, horizontal=True)
-    
-    musicas_disponiveis = sorted(df['Música'].unique())
-    col_sel1, col_sel2, col_sel3 = st.columns(3)
-    
-    with col_sel1:
-        musica1 = st.selectbox("Música 1", musicas_disponiveis, index=0)
-    with col_sel2:
-        musica2 = st.selectbox("Música 2", musicas_disponiveis, index=min(1, len(musicas_disponiveis)-1))
-    with col_sel3:
-        musica3 = st.selectbox("Música 3", musicas_disponiveis, index=min(2, len(musicas_disponiveis)-1)) if qtd_comparacao == 3 else None
+# --- INTERFACE ---
+st.set_page_config(page_title='Comparativo Vybbe', layout="wide")
 
-    lista_selecionada = [m for m in [musica1, musica2, musica3] if m is not None]
-
-    # 3. Filtro de Intervalo Temporal
-    df_temp = df[df['Música'].isin(lista_selecionada)]
-    min_date_available = df_temp[date_col].min().date()
-    max_date_available = df_temp[date_col].max().date()
-
-    st.write("---")
-    c1, c2 = st.columns(2)
-    with c1:
-        start_date = st.date_input("Data de Início", value=min_date_available, min_value=min_date_available, max_value=max_date_available)
-    with c2:
-        end_date = st.date_input("Data de Fim", value=max_date_available, min_value=min_date_available, max_value=max_date_available)
-
-    # Filtragem dos dados para o Gráfico de Linha
-    df_filtered = df_temp[
-        (df_temp[date_col].dt.date >= start_date) & 
-        (df_temp[date_col].dt.date <= end_date)
-    ].copy()
-
-    # 4. GRÁFICO DE LINHA (Performance Temporal)
-    metric_choice = st.radio("Tipo de visualização (Gráfico de Linha):", ["Ranking", "Streams"], horizontal=True)
-    
-    y_axis = "Rank" if metric_choice == "Ranking" else "Streams_Num"
-    y_label = "Posição no Ranking" if metric_choice == "Ranking" else "Número de Streams"
-    text_col = "Rank" if metric_choice == "Ranking" else "y_axis_formatted"
-
-    fig_line = px.line(
-        df_filtered, 
-        x=date_col, 
-        y=y_axis, 
-        color='Música',
-        text=text_col, # CORREÇÃO: Torna os valores visíveis sobre os pontos
-        line_shape='spline',
-        markers=True,
-        title=f"Evolução de {y_label}"
-    )
-
-    fig_line.update_traces(textposition='top center')
-    
-    if metric_choice == "Ranking":
-        fig_line.update_layout(yaxis=dict(autorange="reversed", title=y_label))
-    else:
-        fig_line.update_layout(yaxis=dict(title=y_label))
-
-    fig_line.update_layout(hovermode="x unified", legend=dict(orientation="h", y=1.1))
-    st.plotly_chart(fig_line, use_container_width=True)
-
-    # 5. GRÁFICO DE BARRAS (Streams no Primeiro Registro)
-    st.write("---")
-    st.subheader("🚀 Streams no Primeiro Dia de Registro")
-    
-    # Lógica: Pegar o primeiro registro (data mínima) de cada música dentro do filtro selecionado
-    df_primeiro_dia = df_filtered.sort_values(date_col).groupby('Música').head(1).copy()
-    
-    fig_bar = px.bar(
-        df_primeiro_dia,
-        x='Música',
-        y='Streams_Num',
-        color='Música',
-        text='y_axis_formatted',
-        title="Comparativo de Lançamento (Primeiro dia detectado no período)",
-        labels={'Streams_Num': 'Streams', 'Música': 'Música'}
-    )
-    
-    fig_bar.update_traces(textposition='outside')
-    fig_bar.update_layout(showlegend=False, yaxis_title="Streams")
-    
-    # Adiciona a data de registro no hover para clareza
-    fig_bar.update_traces(hovertemplate="<b>%{x}</b>Streams: %{text}")
-
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-if __name__ == "__main__":
-    st.set_page_config(page_title='Vybbe Analytics - Comparativo', layout="wide")
-    render_comparativo()
-
+st.header("📊 Comparativo de Performance (Linhas & Barras)")
+st.markdown("""
+Bem-vindo à ferramenta de **Inteligência Competitiva**. Este módulo permite:
+* **Comparar Performance Temporal:** Analise até 3 músicas simultaneamente no Ranking ou Streams.
+* **Análise de Lançamento:** O gráfico de barras foca no impacto inicial (primeiro registro) de cada faixa.
+* **Filtros Personalizados:** Ajuste o período para identificar tendências e picos de audiência.
+""")
 st.write("---")
 
-col1, col2 = st.columns([1, 4])
+df = load_data_comparativo(5)
 
-with col1:
-    try:
-        rodape_image = Image.open('habbla_rodape.jpg')
-        st.image(rodape_image, width=110)
-    except FileNotFoundError:
-        st.write("Logo rodapé não encontrada.")
+if not df.empty:
+    # Tratamento de Dados
+    df['DATA'] = pd.to_datetime(df['DATA'], format="%d/%m/%Y")
+    df['Streams_Num'] = pd.to_numeric(df['Streams'].astype(str).str.replace('.', '').replace(',', ''), errors='coerce')
+    df['Streams_Formatado'] = df['Streams_Num'].apply(format_br_number)
 
-with col2:
-    st.markdown(
-        """
-        <div style='font-size: 12px; color: gray;'>
-            Desenvolvido pela equipe de dados da <b>Habbla</b> | © 2026 Habbla Marketing<br>
-            Versão 1.0.0 | Atualizado em: Janeiro/2026<br>
-            <a href="mailto:nil@habbla.ai">nil@habbla.ai</a> |
-            <a href="https://vybbe.com.br" target="_blank">Site Institucional</a>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # Seleção de Músicas
+    qtd = st.radio("Quantidade de músicas para comparar:", [2, 3], horizontal=True)
+    musicas = sorted(df['Música'].unique())
+    
+    col1, col2, col3 = st.columns(3)
+    m1 = col1.selectbox("Música 1", musicas, index=0)
+    m2 = col2.selectbox("Música 2", musicas, index=1)
+    m3 = col3.selectbox("Música 3", musicas, index=2) if qtd == 3 else None
+    
+    selecionadas = [m for m in [m1, m2, m3] if m]
+    df_comp = df[df['Música'].isin(selecionadas)]
+
+    # Filtro de Datas
+    c_date1, c_date2 = st.columns(2)
+    start = c_date1.date_input("Data Início", df_comp['DATA'].min())
+    end = c_date2.date_input("Data Fim", df_comp['DATA'].max())
+
+    df_filtered = df_comp[(df_comp['DATA'].dt.date >= start) & (df_comp['DATA'].dt.date <= end)]
+
+    # 1. GRÁFICO DE LINHA
+    st.subheader("Evolução Temporal")
+    tipo = st.radio("Visualizar por:", ["Ranking", "Streams"], horizontal=True)
+    
+    y_col = "Rank" if tipo == "Ranking" else "Streams_Num"
+    text_col = "Rank" if tipo == "Ranking" else "Streams_Formatado" # Correção visibilidade
+
+    fig_line = px.line(df_filtered, x='DATA', y=y_col, color='Música', text=text_col, line_shape='spline', markers=True)
+    fig_line.update_traces(textposition='top center')
+    if tipo == "Ranking": fig_line.update_layout(yaxis=dict(autorange="reversed"))
+    
+    st.plotly_chart(fig_line, use_container_width=True)
+
+    # 2. GRÁFICO DE BARRAS (Primeira data de entrada)
+    st.write("---")
+    st.subheader("🚀 Impacto no Primeiro Dia de Registro")
+    
+    # Filtra apenas a primeira data de cada música no período selecionado
+    df_primeira = df_filtered.sort_values('DATA').groupby('Música').head(1)
+    
+    fig_bar = px.bar(df_primeira, x='Música', y='Streams_Num', color='Música', text='Streams_Formatado',
+                     title="Volume de Streams no Primeiro Registro Encontrado")
+    fig_bar.update_traces(textposition='outside')
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+else:
+    st.error("Não foi possível carregar os dados da planilha. Verifique os Secrets no Streamlit Cloud.")
