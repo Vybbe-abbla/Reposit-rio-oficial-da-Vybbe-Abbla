@@ -114,7 +114,7 @@ def main():
     # Definição dos dados dos cards
     cards_data = [
         {
-            "icon": "📊",
+            "icon": "🎶",
             "title": "Charts",
             "description": "Rankings de músicas, artistas e álbuns mais populares.", 
             "link": "https://vybbestreams.streamlit.app/"
