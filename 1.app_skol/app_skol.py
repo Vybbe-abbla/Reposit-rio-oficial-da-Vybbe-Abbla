@@ -8,8 +8,8 @@ st.set_page_config(page_title="Sentimento – Evento 08/02", layout="wide")
 # =========================
 # Carregamento dos dados
 # =========================
-comentarios_path = "Comentarios_consilidado.xlsx"
-links_path = "links_skol.xlsx"
+comentarios_path = "1.app_skol/Comentarios_consilidado.xlsx"
+links_path = "1.app_skol/links_skol.xlsx"
 
 df = pd.read_excel(comentarios_path)
 links_df = pd.read_excel(links_path)
